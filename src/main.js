@@ -34,14 +34,21 @@ const HINTS = {
   bells: [`Do not wake them. Creep under the bells (${K('S')}), jump the wires`, 'Do not wake them. Creep under the bells, jump the wires'],
   shears: ['All of you through together, between one snip and the next', 'All of you through together, between one snip and the next'],
   shears1: [`Run through, then call your spool across before the next snip: ${K('E')}`, `Run through, then call your spool across before the next snip: ${K('USE')}`],
-  collector: [`It hears every step. Creep past it, stretch the thread across its path, and all hold ${K('SHIFT')}`, `It hears every step. Creep past it, stretch the thread across its path, and all press ${K('HOLD')}`],
-  collector1: [`It hears every step. Set your spool down, creep past, and hold ${K('SHIFT')} with the thread across its path`, `It hears every step. Set your spool down, creep past, and press ${K('HOLD')} with the thread across its path`],
+  collector: [`Its hands lift anything loose, even creeping. Spread out across its path and all hold ${K('SHIFT')}: it walks into the thread and falls`, `Its hands lift anything loose, even creeping. Spread out across its path and all press ${K('HOLD')}: it walks into the thread and falls`],
+  collector1: [`Its hands lift anything loose, even creeping. Set your spool down in its yard, creep away from it, hold ${K('SHIFT')}: it walks into the thread and falls`, `Its hands lift anything loose, even creeping. Set your spool down in its yard, creep away from it, press ${K('HOLD')}: it walks into the thread and falls`],
   // the Collector, said as you go: what is wrong, what to do now
-  kShort: ['Too close to your spool. Creep further from it: the thread has to stretch across its path', 'Too close to your spool. Creep further from it: the thread has to stretch across its path'],
-  kBrace: [`Now hold ${K('SHIFT')} and keep holding. Let it walk into the thread`, `Now press ${K('HOLD')} and keep holding. Let it walk into the thread`],
-  kHold: ['Keep holding. Let it come. It has to walk between you and the spool', 'Keep holding. Let it come. It has to walk between you and the spool'],
+  kNear: [`ITS HANDS ARE COMING. Hold ${K('SHIFT')}: it cannot lift one who holds fast`, `ITS HANDS ARE COMING. Press ${K('HOLD')}: it cannot lift one who holds fast`],
+  kStill: [`Keep holding ${K('SHIFT')}. Let it step over you. Move only when it has gone by`, `Keep holding ${K('HOLD')}. Let it step over you. Move only when it has gone by`],
+  kSet: [`Set your spool down here: ${K('E')}. Then creep on, away from it`, `Set your spool down here: ${K('USE')}. Then creep on, away from it`],
+  kShort: ['Too close to your spool. Creep on, away from it: the giant has to walk between you and the spool', 'Too close to your spool. Creep on, away from it: the giant has to walk between you and the spool'],
+  kOut: ['The thread lies where it never walks. Come back into its yard', 'The thread lies where it never walks. Come back into its yard'],
+  kBrace: [`Good. Now hold ${K('SHIFT')} and keep holding. Let it walk into the thread`, `Good. Now press ${K('HOLD')} and keep holding. Let it walk into the thread`],
+  kHold: ['Keep holding. Let it come. It trips when it walks between you and the spool', 'Keep holding. Let it come. It trips when it walks between you and the spool'],
   kShortAll: ['Spread out. The thread between you has to stretch across its path', 'Spread out. The thread between you has to stretch across its path'],
+  kBraceAll: [`Now all hold ${K('SHIFT')} and keep holding. Let it walk into the thread`, `Now all press ${K('HOLD')} and keep holding. Let it walk into the thread`],
   kHoldAll: [`Keep holding ${K('SHIFT')}. Every one of you must hold, the thread across its path`, `Keep holding ${K('HOLD')}. Every one of you must hold, the thread across its path`],
+  kShut: [`Shut. Only the giant's fall breaks it open. Go back: spool down, creep away, hold ${K('SHIFT')}`, `Shut. Only the giant's fall breaks it open. Go back: spool down, creep away, press ${K('HOLD')}`],
+  kShutAll: [`Shut. Only the giant's fall breaks it open. Go back, spread across its path, all hold ${K('SHIFT')}`, `Shut. Only the giant's fall breaks it open. Go back, spread across its path, all press ${K('HOLD')}`],
   // the worm in the head
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
@@ -86,7 +93,7 @@ async function boot() {
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;

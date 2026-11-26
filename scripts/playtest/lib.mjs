@@ -9,7 +9,9 @@ export const BASE = process.env.TB_URL || 'http://localhost:5173';
 export const SHOTS = (process.env.TB_SHOTS || path.join(os.tmpdir(), 'tb-shots')) + path.sep;
 fs.mkdirSync(SHOTS, { recursive: true });
 export async function launch() {
-  return chromium.launch({ channel: 'chrome', headless: true, args: ['--enable-gpu', `--use-angle=${process.platform === 'darwin' ? 'metal' : 'd3d11'}`, '--ignore-gpu-blocklist', '--enable-webgl', '--autoplay-policy=no-user-gesture-required', '--mute-audio'] });
+  // TB_SHOW=1: a real window you can watch (with sound)
+  const show = !!process.env.TB_SHOW;
+  return chromium.launch({ channel: 'chrome', headless: !show, args: [...(show ? ['--start-maximized'] : ['--mute-audio']),'--enable-gpu', `--use-angle=${process.platform === 'darwin' ? 'metal' : 'd3d11'}`, '--ignore-gpu-blocklist', '--enable-webgl', '--autoplay-policy=no-user-gesture-required'] });
 }
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function page(browser, url, { viewport = { width: 1280, height: 720 }, ...more } = {}) {

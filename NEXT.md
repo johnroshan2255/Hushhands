@@ -1,5 +1,8 @@
 # What is left
 
+**The full game is planned in `STORY.md` (the story, 15 chapters, about 2 hours) and `DESIGN.md` (saves,
+1 to 4 players, creatures, Blender, every device, the order of work). Start there: phase 0.**
+
 State on 2026-11-26 (second pass, on Windows). The game is playable start to end, alone and with 2, 3
 or 4 players over the network, and a group survives someone leaving. This file lists what was
 checked, what was not, and what still needs building.
@@ -58,6 +61,11 @@ button, a trial for new players, light on the ground, a mind-control worm, hidde
   goal, controls and what hunts you; a six-step **trial** for the first journey alone (walk, jump,
   climb, creep, hold fast, spool), replayable from i.
 - **The Collector explains itself** as you go: too close to the spool, now hold SHIFT, keep holding.
+- **The Collector could be walked past** by creeping under it, and then the way out was shut with no word
+  why. Now its hands lift anything loose, creeping or not; only one holding SHIFT is too heavy, and it
+  steps over them (`loose()` in `src/monsters.js`). Hints in order: its hands are coming, keep holding
+  till it is past, set the spool down, creep away, hold; and at the shut gate, why it is shut. A player
+  doing nothing but what the hint says trips it with no deaths.
 - **Harder / hidden:** three meadow traps lie sunk in the grass until you are on them; six quicker
   tunnel worms, two silent; the crawler roams faster and feels movement further.
 - Checked: solo, 2, 3, 4 and a leave all reach the end; `worm.mjs` passes every worm case.
@@ -101,7 +109,7 @@ button, a trial for new players, light on the ground, a mind-control worm, hidde
 
 - The jump from the second cog to the top lands on the very corner; forgiving, but tight.
 - The thread is a straight length limit between two waists. It does not wrap round corners.
-- The Collector is easy once understood. The den is easy if you simply hold creep and wait.
+- The den is easy if you simply hold creep and wait. The Collector can mean ~20 s holding SHIFT while it paces.
 - Upright phones with 3 or 4 players: the camera pulls far back and the dolls get small.
 - Four players die about once a run at the Collector or the shears (a cut thread: "THE SEVERED CORD").
   Not looked into.

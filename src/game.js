@@ -540,17 +540,32 @@ export class Game {
   /** at the Collector, say what is wrong with the line you are making, and what to do next */
   collectorHint(b) {
     const { L, W } = this, k = L.monsters.find((m) => m.kind === 'collector');
-    if (!k || W.tripped || b.x < k.x0 - 6 || b.x > k.x1 + 4) return null;
+    if (!k || W.tripped || b.x < k.x0 - 6 || b.x > k.x1 + 8) return null;
+    const m = this.mon.find((q) => q.kind === 'collector');
+    // its hands are near: that comes before anything (loose: hold fast; holding: keep holding till it is past)
+    const near = m && (m.mode === 'pace' || m.mode === 'hunt') && Math.abs(m.x - b.x) < 3.2;
+    if (near && !b.braced) return 'kNear';
+    if (b.x > k.x1 + 1.5) return near ? 'kStill' : this.spool ? 'kShut' : 'kShutAll'; // walked past it: the way out is shut
+    if (b.x < k.x0 - 1) return near ? 'kStill' : null; // the area's own hint, on the way in
+    const still = (h) => (near && h !== 'kHold' && h !== 'kHoldAll' ? 'kStill' : h);
+    return still(this.lineHint(b, k));
+  }
+  lineHint(b, k) {
+    let lo, hi;
     if (this.spool) {
       const s = this.spool;
-      if (s.mode !== 'planted') return null; // still 'set your spool down' (the area's own hint)
+      if (s.mode === 'follow') return 'kSet';
+      if (s.mode !== 'planted') return null;
       if (Math.abs(b.x - s.x) < 2.6) return 'kShort';
-      return b.braced ? 'kHold' : 'kBrace';
+      lo = Math.min(b.x, s.x); hi = Math.max(b.x, s.x);
+    } else {
+      const xs = this.players.filter((p) => !p.b.dead).map((p) => p.b.x);
+      lo = Math.min(...xs); hi = Math.max(...xs);
+      if (hi - lo < 2.6) return 'kShortAll';
     }
-    const xs = this.players.filter((p) => !p.b.dead).map((p) => p.b.x);
-    if (!b.braced) return null;
-    if (Math.max(...xs) - Math.min(...xs) < 2.6) return 'kShortAll';
-    return 'kHoldAll';
+    if (hi < k.x0 + 1 || lo > k.x1 - 1) return 'kOut'; // stretched where it never walks
+    if (this.spool) return b.braced ? 'kHold' : 'kBrace';
+    return b.braced ? 'kHoldAll' : 'kBraceAll';
   }
 
   // ------------------------------------------------------------------ drawing

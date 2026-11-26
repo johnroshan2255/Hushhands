@@ -51,10 +51,11 @@ node scripts/playtest/views.mjs          # every screen shape
 node scripts/playtest/worm.mjs           # the worm in the head, every way; the hidden traps
 ```
 
-The playtests play as a returning player (story seen, trial done); `TB_FRESH=1` plays as a new one.
+`TB_SHOW=1` plays in a Chrome window you can watch, with sound. The playtests play as a returning player (story seen, trial done); `TB_FRESH=1` plays as a new one.
 
 Against the built game instead (`npm run play`), set `TB_URL=http://localhost:2567` and skip
 `npm run dev`. The code-player thinks at 60 Hz of game time, so it plays the same on a 60 Hz and a
 144 Hz screen.
 
-See `NEXT.md` for what is done, what is unchecked and what is left.
+See `NEXT.md` for what is done, what is unchecked and what is left, `STORY.md` for the story of the
+full game and `DESIGN.md` for how it is to be built.

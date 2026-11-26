@@ -4,8 +4,10 @@
 // The Needle-Crawler hangs from the den's roof and listens: a footstep or a landing brings it over,
 // and it stabs straight down where the sound was. Sneaking makes no sound.
 //
-// The Collector paces its yard. It hears the same way and picks up whoever made the noise. It can be
-// brought down: stretch the thread across its path, everyone holding it braced, and it trips.
+// The Collector paces its yard. It hears the same way and comes for whoever made the noise. Its hands
+// pick up anything loose they meet, creeping or not; only one holding fast (braced) is too heavy to
+// lift, and it steps over them. It can be brought down: stretch the thread across its path, everyone
+// holding it braced, and it trips. Until it falls, the way out of its yard stays shut.
 import * as pc from 'playcanvas';
 import { addSphere, addLathe, addCylinder } from './meshes.js';
 import { mats, ent, sharedMesh, stickMesh, setStick, addBeam, ink } from './scene.js';
@@ -65,16 +67,18 @@ export function thinkMonster(m, dt, bodies, L, ctx) {
     m.heard -= dt;
     const d = m.tx - m.x;
     if (Math.abs(d) > 0.2) { m.dir = Math.sign(d); m.x += clamp(d, -3.1 * dt, 3.1 * dt); }
-    // whoever is under its hands and not perfectly still
-    for (const b of bodies) if (!b.dead && Math.abs(b.x - m.x) < 1.25 && b.y < m.y + 2 && !(b.braced || (b.sneak && b.noise < 0.1 && Math.abs(b.x - m.tx) > 1.6))) { m.mode = 'grab'; m.t = 0; m.who = b.i; ev.push({ t: 'grab', i: b.i, id: m.id }); return ev; }
+    // whoever is under its hands and not holding fast
+    for (const b of bodies) if (loose(b, m)) { m.mode = 'grab'; m.t = 0; m.who = b.i; ev.push({ t: 'grab', i: b.i, id: m.id }); return ev; }
     if (m.heard <= 0) { m.mode = 'pace'; m.t = 0; }
   } else {
     m.x += m.dir * 1.45 * dt;
     if (m.x > m.x1) { m.x = m.x1; m.dir = -1; } if (m.x < m.x0) { m.x = m.x0; m.dir = 1; }
-    for (const b of bodies) if (!b.dead && b.noise >= 0.3 && Math.abs(b.x - m.x) < 1.25 && b.y < m.y + 2) { m.mode = 'grab'; m.t = 0; m.who = b.i; ev.push({ t: 'grab', i: b.i, id: m.id }); return ev; }
+    for (const b of bodies) if (loose(b, m)) { m.mode = 'grab'; m.t = 0; m.who = b.i; ev.push({ t: 'grab', i: b.i, id: m.id }); return ev; }
   }
   return ev;
 }
+/** a wanderer the Collector's hands meet and can lift: not the spool, not one holding fast */
+const loose = (b, m) => b.i >= 0 && !b.dead && !b.braced && Math.abs(b.x - m.x) < 1.1 && b.y < m.y + 2.2;
 export const packMonster = (m) => [Math.round(m.x * 100) / 100, m.mode, m.dir, Math.round(m.tx * 100) / 100, Math.round(m.t * 100) / 100];
 export function unpackMonster(m, a) { m.x = a[0]; if (m.mode !== a[1]) { m.mode = a[1]; m.t = a[4]; } m.dir = a[2]; m.tx = a[3]; }
 

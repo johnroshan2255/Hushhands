@@ -46,6 +46,7 @@
       const dir = hopping ? hopDir : Math.sign(x - b().x);
       let go = true;
       if (o.stop && o.stop() && !hopping) go = false;
+      if (o.brace) { if (!go && o.stop && o.stop()) hold('ShiftLeft'); else release('ShiftLeft'); } // stopped for danger: hold fast
       const m = dir > 0 ? behind() : body(G.meIdx - 1);
       if (go && m && o.wait !== false && !hopping && (b().x - m.x) * dir > 5.4) go = false; // don't drag the one behind
       if (o.sneak) hold('KeyS'); else release('KeyS');
@@ -242,15 +243,17 @@
   S[8] = function* () { // the collector
     const k = () => G.mon[1], x0 = L().monsters[1].x0;
     const A = x0 + 5, B = x0 + 10;
+    // its hands lift anything loose: whenever they come near, stop and hold fast
+    const near = () => Math.abs(k().x - b().x) < 3 && (k().mode === 'pace' || k().mode === 'hunt');
+    const safe = { sneak: true, wait: false, stop: near, brace: true };
+    function* letItPass() { if (!near()) return; release('KeyS'); hold('ShiftLeft'); yield* until(() => !near(), 60 * 30, 'its hands passing'); release('ShiftLeft'); }
     if (!W().tripped) {
       yield* walkTo(x0 - 6.5);
-      if (solo()) { yield* walkTo(A, { sneak: true }); release('KeyS'); yield* setSpool(); yield* walkTo(B, { sneak: true }); }
-      else yield* walkTo(B - (role() * (B - A)) / (N() - 1), { sneak: true, wait: false });
-      hold('KeyS');
-      yield* until(() => G.players.every((p, i) => p.me || Math.abs(p.b.x - (B - (i * (B - A)) / (N() - 1))) < 0.4) && k().x > A + 0.5 && k().x < B - 0.5, 60 * 120, 'it walking over the thread');
+      if (solo()) { yield* walkTo(A, safe); release('KeyS'); yield* letItPass(); yield* setSpool(); yield* walkTo(B, safe); }
+      else yield* walkTo(B - (role() * (B - A)) / (N() - 1), safe);
       release('KeyS');
-      hold('ShiftLeft');
-      yield* until(() => W().tripped || k().mode === 'fall', 60 * 20, 'it tripping');
+      hold('ShiftLeft'); // and keep holding until it walks into the thread
+      yield* until(() => W().tripped || k().mode === 'fall', 60 * 120, 'it tripping');
       say('it trips');
       yield* until(() => W().open.g7, 300, 'the crash');
       release('ShiftLeft');
@@ -276,7 +279,7 @@
         releaseAll();
         if (e.message !== 'dead') { bot.failed = `${bot.sec}: ${e.message}`; say(`FAILED ${e.message}`); return; }
         bot.deaths++;
-        say(`died in ${bot.sec}`);
+        say(`died in ${bot.sec}: ${document.getElementById("toast")?.textContent || ""} (k at ${G.mon.find((m) => m.kind === "collector")?.x.toFixed(1)} ${G.mon.find((m) => m.kind === "collector")?.mode}; ${G.players.map((p) => `${p.b.x.toFixed(1)}${p.b.braced ? "B" : ""}${p.b.caged ? "C" : ""}`).join(" ")})`);
         if (bot.deaths > (window.__botLives || 12)) { bot.failed = `${bot.sec}: died too often`; return; }
         while (W().phase !== 'play') yield;
         for (let i = 0; i < 50; i++) yield;
