@@ -55,6 +55,11 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Granary
+  lamp: [`Take the lamp: ${K('E')}. They will not cross its light`, 'Take the lamp: USE. They will not cross its light'],
+  lampAll: [`Take the lamp: ${K('E')}. Keep inside its light, all of you`, 'Take the lamp: USE. Keep inside its light, all of you'],
+  toss: [`You cannot jump with it. Toss it over while walking: ${K('E')}, then follow`, 'You cannot jump with it. Toss it over while walking: USE, then follow'],
+  tide: ['They are coming up the silo. Climb', 'They are coming up the silo. Climb'],
   // the Drowned Mill
   swim: [`In deep water you sink. Hold ${K('SPACE')} to swim up, ${K('S')} to dive. The ring over you is your breath`, 'In deep water you sink. Hold JUMP to swim up, pull down to dive. The ring over you is your breath'],
   dive: ['Dive under the wall. Come up on the other side before your breath runs out', 'Dive under the wall. Come up on the other side before your breath runs out'],
@@ -74,7 +79,7 @@ const HINTS = {
   dark1: ['Dark, and cross. Leave the spool lit as bait if you must', 'Dark, and cross. Leave the spool lit as bait if you must'],
   rings1: ['One ring for you, one for your spool', 'One ring for you, one for your spool'],
 };
-const USES = { HOLD: 'hold the lever', HANG: 'hang the spool on the hook', SET: 'set the spool down here', CALL: 'call the spool back' };
+const USES = { HOLD: 'hold the lever', HANG: 'hang the spool on the hook', SET: 'set the spool down here', CALL: 'call the spool back', LAMP: 'pick up the lamp', DROP: 'set the lamp down', TOSS: 'toss the lamp ahead' };
 
 async function boot() {
   stage('finding the thread', 0.08);

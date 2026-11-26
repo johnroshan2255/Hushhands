@@ -9,7 +9,7 @@ const BASE = (import.meta.env && import.meta.env.BASE_URL) || './';
 const dec = (b64, Type) => { const s = atob(b64), u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return new Type(u.buffer); };
 
 function build(device, data) {
-  const parts = {};
+  const parts = {}, raw = {};
   for (const [k, p] of Object.entries(data.parts)) {
     const P = dec(p.p, Float32Array), N8 = dec(p.nn, Int8Array), C = dec(p.c, Uint8Array), I = dec(p.i, Uint16Array);
     const N = new Float32Array(N8.length);
@@ -19,8 +19,9 @@ function build(device, data) {
     m.update(pc.PRIMITIVE_TRIANGLES);
     m.incRefCount();
     parts[k] = m;
+    raw[k] = { n: P.length / 3, P, N, C, I }; // (kept for whoever builds meshes from it on the CPU: the rats)
   }
-  return { parts, meta: data.meta || {} };
+  return { parts, raw, meta: data.meta || {} };
 }
 
 /** start loading (returns a promise of the model) */

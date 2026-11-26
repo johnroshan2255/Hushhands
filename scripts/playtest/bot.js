@@ -378,6 +378,49 @@
     if (solo()) yield* callSpool();
     yield* toExit();
   };
+  // ---- the Granary: the lamp, the gap, the silo
+  const lamp = (k = 0) => L().lamps[k];
+  const holding = () => L().lamps.some((l) => l.by === G.meIdx);
+  /** the one with the lamp walks to x; the rest keep close behind, inside its light */
+  function* carryTo(x, o = {}) {
+    if (role() === 0) {
+      if (!holding()) { yield* walkTo(lamp().x - 0.3, { wait: false }); yield* tap('KeyE', 4); yield* until(holding, 120, 'the lamp in hand'); }
+      yield* walkTo(x, { wait: false, stop: () => others().some((m) => Math.abs(m.x - b().x) > 1.9), ...o });
+    } else {
+      for (let i = 0; ; i++) {
+        chk();
+        if (i > 60 * 60) throw new Error('stuck following the lamp');
+        const l = lamp(), tx = l.x - 0.55 * role();
+        if (l.by >= 0 && l.x >= x - 0.3) break;
+        if (Math.abs(tx - b().x) > 0.25) { const d = Math.sign(tx - b().x); hold(d > 0 ? 'KeyD' : 'KeyA'); release(d > 0 ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); }
+        yield;
+      }
+      release('KeyD'); release('KeyA');
+      yield* walkTo(lamp().x - 0.55 * role(), { wait: false, tol: 0.2 });
+    }
+  }
+  S['granary:0'] = function* () {
+    yield* carryTo(46.3);
+    if (role() === 0) { yield* tap('KeyE', 4); yield* until(() => !holding(), 120, 'the lamp down'); }
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.6, { wait: false });
+  };
+  S['granary:1'] = function* () {
+    yield* gather();
+    if (role() === 0) {
+      yield* walkTo(lamp().x - 0.3, { wait: false }); yield* tap('KeyE', 4); yield* until(holding, 120, 'the lamp in hand');
+      yield* walkTo(49.4, { wait: false });
+      // run at the gap and toss it over while walking
+      hold('KeyD'); yield* until(() => b().x > 50.9, 120, 'the run-up'); key('keydown', 'KeyE'); yield* frames(3); key('keyup', 'KeyE');
+      yield* until(() => !holding(), 60, 'the toss'); release('KeyD');
+      say(`tossed to ${lamp().x.toFixed(1)}`);
+    } else yield* until(() => lamp().by < 0 && lamp().x > 54, 60 * 30, 'the lamp over the gap');
+    const hop = (dir) => b().x > 51.2 && b().x < 52 && dir > 0;
+    yield* walkTo(lamp().x - 0.4 - role() * 0.5, { wait: false, hop });
+    yield* carryTo(80.6);
+    if (role() === 0) { yield* tap('KeyE', 4); }
+    yield* walkTo(L().cps[2].x + 0.6 - role() * 0.6, { wait: false });
+  };
+  S['granary:2'] = function* () { yield* toExit(); };
   S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }

@@ -7,13 +7,14 @@ import den from './c04-den.js';
 import mill from './c05-mill.js';
 import gears from './c06-gears.js';
 import fen from './c07-fen.js';
+import granary from './c08-granary.js';
 import cathedral from './c13-cathedral.js';
 import collector from './c14-collector.js';
 import spindle from './c15-spindle.js';
 
 export { LINK };
 /** in the order they are walked */
-export const CHAPTERS = [pit, meadow, chasm, den, mill, gears, fen, cathedral, collector, spindle];
+export const CHAPTERS = [pit, meadow, chasm, den, mill, gears, fen, granary, cathedral, collector, spindle];
 export const chapterIndex = (id) => Math.max(0, CHAPTERS.findIndex((c) => c.id === id));
 
 export function buildChapter(ci, n) {
