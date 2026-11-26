@@ -452,6 +452,46 @@
     }
     yield* toExit();
   };
+  // ---- the Larder: creep and freeze, sack to sack, meat, poison
+  const glut = () => G.mon.find((m) => m.kind === 'glutton');
+  const busy = (m) => m.mode === 'hunt' || m.mode === 'rise' || m.mode === 'bite';
+  /** creep, freezing whenever it is near */
+  function* creepPast(x) { yield* walkTo(x, { sneak: true, wait: false, stop: () => Math.abs(glut().x - b().x) < 3.6 && glut().mode !== 'chew' && glut().mode !== 'dead' }); release('KeyS'); }
+  /** stand in a sack, still and low, until it is quiet near me */
+  function* hide() { hold('KeyS'); yield* frames(10); yield* until(() => !busy(glut()) || Math.abs(glut().x - b().x) > 6, 60 * 20, 'it going quiet'); yield* frames(20); release('KeyS'); }
+  S['larder:0'] = function* () { yield* creepPast(L().cps[1].x + 0.4 - role() * 0.5); };
+  S['larder:1'] = function* () {
+    yield* gather();
+    for (const s of L().sacks.filter((q) => q.x < 46)) {
+      // go when it is far, or busy somewhere else
+      yield* until(() => Math.abs(glut().x - b().x) > 7 || (busy(glut()) && Math.abs(glut().tx - b().x) > 3), 60 * 30, 'a moment to move');
+      yield* walkTo(s.x - role() * 0.3, { wait: false, tol: 0.12 });
+      yield* hide();
+    }
+    yield* until(() => Math.abs(glut().x - b().x) > 6, 60 * 30, 'a moment to move');
+    yield* walkTo(L().cps[2].x + 0.4 - role() * 0.5, { wait: false });
+  };
+  S['larder:2'] = function* () {
+    yield* gather();
+    const q = L().meat[0];
+    if (role() === 0) { yield* walkTo(q.x, { wait: false, tol: 0.2 }); yield* tap('KeyE', 4); yield* until(() => W().meat[0] >= 1, 120, 'the meat falling'); }
+    else yield* until(() => W().meat[0] >= 1, 60 * 20, 'the meat falling');
+    yield* walkTo(53.5 - role() * 0.5, { wait: false });
+    yield* until(() => glut().mode === 'chew', 60 * 20, 'it chewing');
+    yield* walkTo(L().cps[3].x + 0.4 - role() * 0.5, { wait: false });
+  };
+  S['larder:3'] = function* () {
+    yield* gather();
+    const s = L().sacks[L().sacks.length - 1], q = L().meat[L().meat.length - 1];
+    yield* until(() => Math.abs(glut().x - b().x) > 7 || glut().mode === 'chew', 60 * 30, 'a moment to move');
+    if (role() === 0) { yield* walkTo(q.x, { wait: false, tol: 0.2 }); yield* tap('KeyE', 4); }
+    yield* walkTo(s.x - role() * 0.3, { wait: false, tol: 0.12 });
+    hold('KeyS');
+    yield* until(() => W().open.gl, 60 * 30, 'it eating the poison');
+    release('KeyS');
+    say('the Glutton is dead');
+    yield* toExit();
+  };
   S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }

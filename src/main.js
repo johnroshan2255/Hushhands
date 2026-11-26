@@ -55,6 +55,11 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Larder
+  boards: ['Something under the boards feels every step. Creep. Keep still when they creak', 'Something under the boards feels every step. Creep. Keep still when they creak'],
+  sacks: [`In a sack, keep still and hold ${K('S')}: you are only a sack`, 'In a sack, keep still and pull the stick down: you are only a sack'],
+  hooks: [`Knock the meat down (${K('E')}). It goes for the loudest thing on the floor. Go while it chews`, 'Knock the meat down (USE). It goes for the loudest thing on the floor. Go while it chews'],
+  poison: ['A sack from the Dye-Works. Feed it that', 'A sack from the Dye-Works. Feed it that'],
   // the Dye-Works
   fumes: ['Fumes. Hold your breath, and do not stop', 'Fumes. Hold your breath, and do not stop'],
   bloom: ['The pale things burst if you come near on foot. Jump clear over them', 'The pale things burst if you come near on foot. Jump clear over them'],
@@ -84,7 +89,7 @@ const HINTS = {
   dark1: ['Dark, and cross. Leave the spool lit as bait if you must', 'Dark, and cross. Leave the spool lit as bait if you must'],
   rings1: ['One ring for you, one for your spool', 'One ring for you, one for your spool'],
 };
-const USES = { HOLD: 'hold the lever', HANG: 'hang the spool on the hook', SET: 'set the spool down here', CALL: 'call the spool back', LAMP: 'pick up the lamp', DROP: 'set the lamp down', TOSS: 'toss the lamp ahead' };
+const USES = { HOLD: 'hold the lever', HANG: 'hang the spool on the hook', SET: 'set the spool down here', CALL: 'call the spool back', LAMP: 'pick up the lamp', MEAT: 'knock the meat down', DROP: 'set the lamp down', TOSS: 'toss the lamp ahead' };
 
 async function boot() {
   stage('finding the thread', 0.08);

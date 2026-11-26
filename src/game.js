@@ -18,7 +18,7 @@ import { Gore } from './gore.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const NONE = { x: 0, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
-const F = { ground: 1, braced: 2, sneak: 4, right: 8, hang: 16, dead: 32, mantle: 64, use: 128, climb: 256, caged: 512, taut: 1024, dark: 2048 };
+const F = { ground: 1, braced: 2, sneak: 4, right: 8, hang: 16, dead: 32, mantle: 64, use: 128, climb: 256, caged: 512, taut: 1024, dark: 2048, hidden: 4096 };
 const SCALE = 0.68; // a doll is small
 const RED = [1, 0.12, 0.08];
 let redMat = null;
@@ -90,7 +90,7 @@ export class Game {
     this.W = { open: { ...open }, plates: [], levers: [], traps: [], slabs: [], wake: 0, scream: false, wT0: {}, wl: L.waters.map((w) => w.y0), cp: Math.min(cp, L.cps.length - 1), rings: [], won: 0, phase: 'play', deaths, cut, epoch: 0, tripped, bell: {}, found: [...found], exitT: 0 };
     for (const g of L.gates) if (g.startOpen && open[g.id] === undefined) this.W.open[g.id] = true;
     this.drainAt = {}; this.eelBeat = {}; this.pushT = 0; this.ratT = 0; this.squealT = 0;
-    this.W.swarm = []; this.W.blooms = [];
+    this.W.swarm = []; this.W.blooms = []; this.W.meat = [];
     this.pressBeats = L.presses.map(() => null);
     for (const l of L.lamps) { l.by = -1; l.x = l.x0 ?? l.x; l.y = l.y0 ?? l.y; l.x0 = l.x; l.y0 = l.y; }
     this.rats = L.swarms.length || L.waters.some((w) => w.look === 'rats') ? new RatsView(app, L, this.low ? 0 : 2) : null;
@@ -161,7 +161,7 @@ export class Game {
     p.net = { x: m.x, y: m.y, vx: m.vx, vy: m.vy, t: performance.now() };
     b.vx = m.vx; b.vy = m.vy; b.ground = !!(f & F.ground); b.braced = !!(f & F.braced); b.sneak = !!(f & F.sneak); b.facing = f & F.right ? 1 : -1;
     b.hang = !!(f & F.hang); b.mantling = !!(f & F.mantle); b.climbing = f & F.climb ? 1 : 0; b.taut = !!(f & F.taut); b.reel = m.r || 0; b.reelTo = m.rt ?? null;
-    p.use = !!(f & F.use); p.noise = m.n || 0; p.dark = !!(f & F.dark);
+    p.use = !!(f & F.use); p.noise = m.n || 0; p.dark = !!(f & F.dark); p.hiddenNet = !!(f & F.hidden);
     if (Math.hypot(b.x - m.x, b.y - m.y) > 4) { b.x = m.x; b.y = m.y; }
   }
   sendMe(dt) {
@@ -170,7 +170,7 @@ export class Game {
     this.noiseOut = Math.max(this.noiseOut, b.noise);
     if (this.sendT > 0 || !this.net.online) return;
     this.sendT = 0.05;
-    const f = (b.ground ? F.ground : 0) | (b.braced ? F.braced : 0) | (b.sneak ? F.sneak : 0) | (b.facing > 0 ? F.right : 0) | (b.hang ? F.hang : 0) | (b.mantle ? F.mantle : 0) | (this.me.use ? F.use : 0) | (b.climbing ? F.climb : 0) | (b.taut ? F.taut : 0) | (b.dark > 0 ? F.dark : 0);
+    const f = (b.ground ? F.ground : 0) | (b.braced ? F.braced : 0) | (b.sneak ? F.sneak : 0) | (b.facing > 0 ? F.right : 0) | (b.hang ? F.hang : 0) | (b.mantle ? F.mantle : 0) | (this.me.use ? F.use : 0) | (b.climbing ? F.climb : 0) | (b.taut ? F.taut : 0) | (b.dark > 0 ? F.dark : 0) | (b.hidden ? F.hidden : 0);
     const r2 = (v) => Math.round(v * 100) / 100;
     this.send('p', { x: r2(b.x), y: r2(b.y), vx: r2(b.vx), vy: r2(b.vy), f, r: r2(b.reel), rt: b.reelTo, n: r2(this.noiseOut) });
     this.noiseOut = 0;
@@ -184,6 +184,7 @@ export class Game {
     if (m.cr) m.cr.forEach((c, i) => { const k = L.crates[i]; if (k) { k.tx = c[0]; k.ty = c[1]; } });
     if (m.sw != null) W.swarm = unbits(m.sw, L.swarms.length);
     if (m.bl != null) W.blooms = unbits(m.bl, L.blooms.length);
+    if (m.mt) W.meat = m.mt;
     if (m.lp) m.lp.forEach((a, i) => { const l = L.lamps[i]; if (l) { l.by = a[2]; if (l.by < 0) { l.x = a[0]; l.y = a[1]; } } });
     m.m.forEach((a, i) => { if (this.mon[i]) unpackMonster(this.mon[i], a); });
   }
@@ -230,6 +231,11 @@ export class Game {
       } else if (l.by < 0 && !L.lamps.some((q) => q.by === from) && Math.abs(p.b.x - l.x) < 1.4 && Math.abs(p.b.y - l.y) < 1.4) l.by = from;
       else return;
       this.emit({ t: 'lamp', k: i.k, by: l.by, x: l.x, y: l.y, toss: !!i.toss });
+    } else if (i.t === 'meat') { // knock the meat off its hook
+      const q = L.meat[i.k], p = this.players[from];
+      if (!q || W.meat[i.k] || !p || Math.abs(p.b.x - q.x) > 1.3) return;
+      W.meat[i.k] = 1;
+      this.emit({ t: 'meat', k: i.k, state: 1 });
     } else if (i.t === 'brush') { // someone came too near a bloom: it bursts, and everyone close breathes it
       const bl = L.blooms[i.k];
       if (!bl || W.blooms[i.k]) return;
@@ -272,7 +278,7 @@ export class Game {
     }
     if (W.phase !== 'play') return;
     // everyone who can weigh something down, or be heard
-    const bodies = this.players.map((p, i) => ({ i, x: p.b.x, y: p.b.y, vx: p.b.vx, noise: p.me ? p.b.noise : p.noise, sneak: p.b.sneak, braced: p.b.braced, ground: p.b.ground, dead: p.b.dead, anchor: p.b.braced && p.b.ground, use: p.use, real: true, lit: !(p.me ? p.b.dark > 0 : p.dark) && !p.hid }));
+    const bodies = this.players.map((p, i) => ({ i, x: p.b.x, y: p.b.y, vx: p.b.vx, noise: p.me ? p.b.noise : p.noise, sneak: p.b.sneak, braced: p.b.braced, ground: p.b.ground, dead: p.b.dead, anchor: p.b.braced && p.b.ground, use: p.use, real: true, lit: !(p.me ? p.b.dark > 0 : p.dark) && !p.hid, hidden: p.me ? !!p.b.hidden : !!p.hiddenNet }));
     if (this.spool) bodies.push({ i: -1, x: this.spool.x, y: this.spool.y, vx: 0, noise: 0, sneak: true, braced: this.spool.mode === 'planted', ground: this.spool.ground || this.spool.mode === 'planted', dead: false, anchor: this.spool.mode === 'planted', use: false, real: false, flying: this.spool.mode === 'return' || this.spool.mode === 'hooked', lit: !(this.spool.dark > 0) });
     const on = (x, y, hw) => bodies.some((b) => !b.dead && !b.flying && b.ground && Math.abs(b.x - x) < hw && Math.abs(b.y - y) < 0.3);
     // plates, levers, gates
@@ -323,12 +329,16 @@ export class Game {
     });
     // the hunters
     this.mon.forEach((m, mi) => {
-      for (const e of thinkMonster(m, dt, bodies, L)) {
+      for (const e of thinkMonster(m, dt, bodies, L, { meat: L.meat.map((q, k) => ({ x: q.x, state: W.meat[k] || 0, poison: q.poison })) })) {
         if (e.t === 'stab') this.emit({ t: 'stab', x: e.x, mi });
         else if (e.t === 'grab') { if (e.i >= 0) { const p = this.players[e.i]; this.kill(e.i, 'caged', p.b.x, p.b.y, mi); } }
         else if (e.t === 'trip') this.emit({ t: 'trip', mi, x: e.x });
         else if (e.t === 'crash') { W.tripped = true; const g = L.monsters[mi].gate; if (g) W.open[g] = true; this.emit({ t: 'crash', mi, x: e.x }); if (g) this.emit({ t: 'gate', id: g }); }
         else if (e.t === 'hear') this.emit({ t: 'hear', mi });
+        else if (e.t === 'rise' || e.t === 'bite') this.emit({ t: `g${e.t}`, mi, x: e.x });
+        else if (e.t === 'eat') { const p = this.players[e.i]; if (p && !p.b.dead) this.kill(e.i, 'swallowed', p.b.x, p.b.y, mi); }
+        else if (e.t === 'meat') { W.meat[e.k] = 2; this.emit({ t: 'meat', k: e.k, state: 2 }); }
+        else if (e.t === 'gdead') { const g = L.monsters[mi].gate; if (g) W.open[g] = true; this.emit({ t: 'gdead', mi, x: e.x }); if (g) this.emit({ t: 'gate', id: g }); }
         else if (e.t === 'latch') { H.latched[e.i] = mi; this.emit({ t: 'latch', mi, who: e.i }); }
         else if (e.t === 'drained') { delete H.latched[e.i]; const p = this.players[e.i]; if (p) this.kill(e.i, 'drained', p.b.x, p.b.y, mi); }
         else if (e.t === 'burn' || e.t === 'ash') this.emit({ t: e.t, mi, x: e.x, y: e.y });
@@ -342,7 +352,7 @@ export class Game {
     if (H.snapT <= 0 && this.net.online) {
       H.snapT = 0.1;
       this.snapX = L.crates.length ? L.crates.map((c) => [Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100]) : undefined;
-      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX, sw: L.swarms.length ? bits(W.swarm) : undefined, bl: L.blooms.length ? bits(W.blooms) : undefined, lp: L.lamps.length ? L.lamps.map((l) => [Math.round(l.x * 100) / 100, Math.round(l.y * 100) / 100, l.by]) : undefined });
+      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX, sw: L.swarms.length ? bits(W.swarm) : undefined, bl: L.blooms.length ? bits(W.blooms) : undefined, mt: L.meat.length ? W.meat.slice() : undefined, lp: L.lamps.length ? L.lamps.map((l) => [Math.round(l.x * 100) / 100, Math.round(l.y * 100) / 100, l.by]) : undefined });
     }
   }
 
@@ -355,6 +365,10 @@ export class Game {
       case 'gate': { W.open[e.id] = true; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.burst('dust', g.x + 0.35, g.y + 0.2, 0.5, 10, { spread: 1.2 }); fx.shake(0.35); } break; }
       case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
       case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
+      case 'meat': { W.meat[e.k] = e.state; const q = L.meat[e.k]; if (e.state === 1) { sfx.play('land', { x: q.x, vol: 1 }); sfx.play('squelch', { x: q.x }); fx.shake(0.2); } else { sfx.play('chomp', { x: q.x }); fx.burst(q.poison ? 'spore' : 'dye', q.x, q.y + 0.4, 0.3, 14, { power: 1 }); } break; }
+      case 'grise': { sfx.play('creak', { x: e.x, vol: 1.4 }); sfx.play('groan', { x: e.x, vol: 0.8 }); fx.burst('dust', e.x, this.mon[e.mi].y, 0.4, 10, { spread: 1.2, power: 0.7 }); if (Math.abs(e.x - this.cam.x) < 12) fx.shake(0.35); break; }
+      case 'gbite': { sfx.play('chomp', { x: e.x }); fx.shake(0.7); fx.burst('dust', e.x, this.mon[e.mi].y + 0.2, 0.4, 16, { spread: 1.5, power: 1.2 }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.4, 0.4, 8, { power: 1 }); break; }
+      case 'gdead': sfx.play('roar', { x: e.x, vol: 0.8 }); sfx.play('crash', { x: e.x }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.5, 0.3, 40, { power: 1.6, dir: [0, 1.2, 0] }); fx.shake(0.9); break;
       case 'bloom': { W.blooms[e.k] = true; const bl = L.blooms[e.k]; sfx.play('burst', { x: bl.x, vol: 0.6 }); sfx.play('flutter', { x: bl.x }); fx.burst('spore', bl.x, bl.y + 0.3, 0.3, 30, { power: 1.2, dir: [0, 0.6, 0] }); break; }
       case 'rot': { const p = this.players[e.who]; if (!p) break; p.rot = e.on ? e.t0 : null; if (e.on) { sfx.play('squelch', { x: p.b.x }); if (p.me) this.hud.flash('#4d5a3a', 0.35, 200); if (e.from != null && p.me) this.hud.toast(`The rot came down the thread from ${this.players[e.from].name}.`); } else { sfx.play('splash', { x: p.b.x }); fx.burst('drop', p.b.x, p.b.y + 0.8, 0.4, 10); } break; }
       case 'swarm': W.swarm[e.k] = true; sfx.play('squeal', { x: L.swarms[e.k].x0, vol: 1.6 }); sfx.play('squeal', { x: L.swarms[e.k].x1, vol: 1.4 }); fx.shake(0.25); break;
@@ -462,7 +476,7 @@ export class Game {
     W.epoch = e.ep; W.cp = e.cp; W.phase = 'play'; W.traps = []; W.slabs = []; W.wake = 0; W.scream = false; W.wT0 = {}; W.plates = []; W.levers = []; W.rings = [];
     for (const w of this.L.waters) if (w.lock && !(w.drain && W.open[w.drain])) W.open[w.lock] = true;
     for (const c of this.L.crates) { const keep = c.x0 < this.L.cps[e.cp].x - 1 && c.x > this.L.cps[e.cp].x; if (!keep) { c.x = c.x0; c.y = c.y0; c.vx = c.vy = 0; c.tx = c.ty = undefined; } }
-    this.drainAt = {}; this.eelBeat = {}; this.ratT = 0; W.swarm = []; W.blooms = [];
+    this.drainAt = {}; this.eelBeat = {}; this.ratT = 0; W.swarm = []; W.blooms = []; W.meat = [];
     for (const p of this.players) p.rot = null;
     if (this.host) this.host.rot = {};
     const cpx = this.L.cps[e.cp].x;
@@ -510,7 +524,7 @@ export class Game {
       if (carrying >= 0) inp = { ...inp, jump: false };
       if (can && !b.dead && input.tap('use')) {
         if (carrying >= 0) { this.intent({ t: 'lamp', k: carrying, toss: Math.abs(b.vx) > 1.2 }); this.usedTap = true; }
-        else { const k = this.nearLamp(b); if (k >= 0) { this.intent({ t: 'lamp', k }); this.usedTap = true; } }
+        else { const k = this.nearLamp(b); if (k >= 0) { this.intent({ t: 'lamp', k }); this.usedTap = true; } else { const h = this.nearMeat(b); if (h >= 0) { this.intent({ t: 'meat', k: h }); this.usedTap = true; } } }
       }
       // close to a friend with a worm in them: USE tears it out
       if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); else { const g = this.players.find((p) => !p.me && p.latched != null && !p.b.dead && Math.abs(p.b.x - b.x) < 1.4 && Math.abs(p.b.y - b.y) < 1.5); if (g) this.intent({ t: 'pull', k: g.i }); } }
@@ -519,6 +533,8 @@ export class Game {
       else stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0 });
       this.mud(b, dt);
       if (can && !b.dead) { this.breathe(b, dt); this.pushCrates(b, inp, dt); this.rotting(b, dt, T); }
+      if (b.ground && Math.abs(b.vx) > 0.3 && L.creaky.some((c) => b.x > c.x0 && b.x < c.x1)) { b.noise = Math.max(b.noise, 0.5); if ((this.creakT = (this.creakT || 0) - dt) <= 0) { this.creakT = 0.5 + Math.random() * 0.5; this.sfx.play('creak', { x: b.x, vol: 0.5 }); } }
+      b.hidden = !b.dead && b.ground && b.sneak && Math.abs(b.vx) < 0.2 && L.sacks.some((s) => Math.abs(b.x - s.x) < (s.w || 0.9) / 2 && Math.abs(b.y - s.y) < 0.4);
       if (this.spool) this.stepSpoolAll(dt, can);
       me.use = can && input.held('use') && this.nearLever(b) >= 0;
       // ---- the others, eased toward where they say they are
@@ -647,6 +663,7 @@ export class Game {
     if (this.spool && !(this.spool.dark > 0) && this.spool.mode !== 'return') out.push({ x: this.spool.x, y: this.spool.y, r: 2.1 });
     return out;
   }
+  nearMeat(b) { return this.L.meat.findIndex((q, k) => !this.W.meat[k] && Math.abs(b.x - q.x) < 1.1 && b.y < q.hy && b.y > q.hy - 4); }
   nearLamp(b) { return this.L.lamps.findIndex((l) => l.by < 0 && Math.abs(b.x - l.x) < 1.2 && Math.abs(b.y - l.y) < 1.3); }
   /** the top of the ground under x, at or below y */
   groundUnder(x, y) { let best = null; for (const s of this.space.solids()) { if (s.crate || this.space.open(s)) continue; if (x >= s.x0 && x <= s.x1 && s.y1 <= y + 0.05 && (best === null || s.y1 > best)) best = s.y1; } return best; }
@@ -770,6 +787,7 @@ export class Game {
       const carry = this.L.lamps.findIndex((l) => l.by === this.meIdx);
       if (carry >= 0) use = Math.abs(b.vx) > 1.2 ? 'TOSS' : 'DROP';
       else if (this.nearLamp(b) >= 0) use = 'LAMP';
+      else if (this.nearMeat(b) >= 0) use = 'MEAT';
       else if (this.nearLever(b) >= 0) use = 'HOLD';
       else if (this.spool) use = this.spool.mode === 'follow' ? (this.nearHook(b) ? 'HANG' : b.ground ? 'SET' : null) : this.spool.mode === 'return' ? null : 'CALL';
     }
@@ -970,7 +988,7 @@ export class Game {
         if (m.kind === 'crawler') {
           const Z = m.zone || L.monsters.find((q) => q.id === m.id).zone;
           if (b.x > Z.x0 - 4 && b.x < Z.x1 + 2) d = Math.max(d, 0.35 + 0.3 * Math.max(0, 1 - dx / 9) + (m.mode === 'roam' ? 0 : 0.45));
-        } else if (m.kind === 'drinker') { if (m.mode !== 'dead' && dx < 12) d = Math.max(d, 0.25 + 0.35 * (1 - dx / 12) + (m.mode === 'hunt' || m.mode === 'drink' ? 0.4 : 0)); } else if (m.mode !== 'down' && dx < 18) d = Math.max(d, 0.25 + 0.4 * (1 - dx / 18) + (m.mode === 'hunt' || m.mode === 'grab' ? 0.4 : 0));
+        } else if (m.kind === 'glutton') { if (m.mode !== 'dead' && b.x > m.x0 - 3 && b.x < m.x1 + 3) d = Math.max(d, 0.3 + 0.35 * Math.max(0, 1 - dx / 10) + (m.mode === 'hunt' || m.mode === 'rise' ? 0.4 : 0)); } else if (m.kind === 'drinker') { if (m.mode !== 'dead' && dx < 12) d = Math.max(d, 0.25 + 0.35 * (1 - dx / 12) + (m.mode === 'hunt' || m.mode === 'drink' ? 0.4 : 0)); } else if (m.mode !== 'down' && dx < 18) d = Math.max(d, 0.25 + 0.4 * (1 - dx / 18) + (m.mode === 'hunt' || m.mode === 'grab' ? 0.4 : 0));
       }
       for (const w of L.worms) if (Math.abs(w.x - b.x) < 2.2) d = Math.max(d, 0.3 + 0.35 * wormOut(w, T));
       if (L.bells.length && b.x > L.bells[0].x - 6 && b.x < L.bells[L.bells.length - 1].x + 3) d = Math.max(d, 0.3 + W.wake * 0.7);

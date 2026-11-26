@@ -289,6 +289,10 @@ export class Scene {
         bx(mb, x - 0.2, x + d.w + 0.2, y - 0.25, y + 0.15, -2.2, 2.2, ink(1.2));
         for (let sx = x; sx < x + d.w; sx += 0.9) bx(mb, sx, sx + 0.06, y - 3, y, 2.25, 2.35, ink(0.8));
         break;
+      case 'hooks': // a rail of hooks under the ceiling; on some of them, what is left of dolls
+        bx(mb, x - 0.5, x + d.w + 0.5, y - 0.1, y + 0.1, -2.6, -1.8, ink());
+        for (let hx = x; hx < x + d.w; hx += 1.1 + rng() * 0.6) { const l = 1.4 + rng() * 1.6; addBeam(mb, hx, y, hx, y - l, -2.2, 0.025, 0.025, ink()); addAnnulus(mb, hx, y - l - 0.08, -2.2, 0.05, 0.09, 8, 0.03, ink()); if (rng() < 0.5) { addSphere(mb, { x: hx, y: y - l - 0.45, z: -2.2, r: 0.17, sy: 1.6, segW: 7, segH: 5, colFn: () => ink() }); addSphere(mb, { x: hx, y: y - l - 0.05, z: -2.2, r: 0.12, segW: 6, segH: 4, colFn: () => ink() }); } }
+        break;
       case 'ratholes': // a ragged hole low in a wall, where they come out
         bx(mb, x - 0.9, x + 0.9, y, y + 3.4, -2.6, -1.6, ink());
         addSphere(mb, { x, y: y + 0.15, z: -1.55, r: 0.55, sy: 0.75, segW: 10, segH: 5, colFn: () => rgba(0, 0, 0, 0) });
@@ -511,6 +515,14 @@ export class Scene {
     // fumes: slow pale-green banks that drift
     if (!this.M.fume) { this.M.fume = tintMaterial(); this.M.fume.setParameter('uTint', new Float32Array([0.55, 0.62, 0.45, 0.5])); }
     this.fumes = L.fumes.map((f) => { const m = this.mesh((mb) => { for (let i = 0; i < 9; i++) addSphere(mb, { x: f.x0 + ((i + 0.5) / 9) * (f.x1 - f.x0), y: f.y0 + (f.y1 - f.y0) * (0.3 + (i % 3) * 0.2), z: -0.5 + (i % 2) * 1.6, r: (f.y1 - f.y0) * 0.55, sy: 0.6, segW: 10, segH: 6, colFn: () => rgba(1, 1, 1, 0.35 + (i % 2) * 0.15) }); }); const e = ent(root, m, this.M.fume, 0, 0, 0, 84); return { f, e }; });
+    // the Larder's hooks, and what hangs from them
+    const hookM = SM('meathook', (mb) => { addBeam(mb, 0, 0, 0, -0.9, 0, 0.03, 0.03, ink()); addAnnulus(mb, 0, -1.0, 0, 0.06, 0.1, 10, 0.04, ink()); });
+    const meatM = SM('meat', (mb) => { addSphere(mb, { y: -0.35, r: 0.38, sy: 1.25, segW: 9, segH: 7, colFn: () => rgba(0.16, 0.03, 0.025, 0.1), jitter: 0.2, rng: this.rng }); addBeam(mb, -0.1, -0.7, 0.05, -0.95, 0.2, 0.08, 0.08, rgba(0.6, 0.55, 0.5, 0.2)); });
+    const poisonM = SM('poisonsack', (mb) => { addSphere(mb, { y: -0.4, r: 0.36, sy: 1.3, segW: 9, segH: 7, colFn: () => ink(1.2), jitter: 0.15, rng: this.rng }); addSphere(mb, { x: 0.1, y: -0.3, z: 0.3, r: 0.12, segW: 6, segH: 4, colFn: () => rgba(0.7, 0.8, 0.55, 0.6) }); });
+    this.meat = L.meat.map((q) => { ent(root, hookM, M.world, q.x, q.hy, 0); const e = ent(root, q.poison ? poisonM : meatM, M.world, q.x, q.hy - 0.95, 0.1); return { q, e }; });
+    // sacks big enough to hide in, in front of you
+    const hideM = SM('hidesack', (mb) => { addSphere(mb, { y: 0.55, r: 0.6, sy: 1.0, segW: 10, segH: 7, colFn: () => ink(1.05), jitter: 0.08, rng: this.rng }); addCylinder(mb, { y: 1.1, r0: 0.18, r1: 0.26, h: 0.25, seg: 7, colFn: () => ink() }); });
+    for (const s of L.sacks) ent(root, hideM, M.world, s.x, s.y, 0.55);
     // crates: an old wooden box, planks and a cross-brace
     this.crates = L.crates.map((c) => { const m = SM(`crate${c.w}x${c.h}`, (mb) => { bx(mb, -c.w / 2, c.w / 2, 0, c.h, -0.55, 0.55, ink(1.15)); for (let y = 0.15; y < c.h; y += 0.3) bx(mb, -c.w / 2 - 0.02, c.w / 2 + 0.02, y, y + 0.04, -0.57, 0.57, ink(0.7)); addBeam(mb, -c.w / 2 + 0.05, 0.05, c.w / 2 - 0.05, c.h - 0.05, 0.58, 0.08, 0.02, ink(0.8)); }); return { c, e: ent(root, m, M.world, c.x, c.y, 0) }; });
     // eels: a long dark ribbon low in the water, with a pale glow that swells before it strikes
@@ -540,6 +552,7 @@ export class Scene {
     lit.length = 0;
     for (const s of this.shafts || []) lit.push({ x: s.x, y: s.y + 0.6, z: 0.9, r: 2.2 + s.w, col: [0.72, 0.8, 0.78], k: 0.55 * s.k, pri: 0 });
     for (const o of this.crates || []) o.e.setLocalPosition(o.c.x, o.c.y, 0);
+    (this.meat || []).forEach((o, k) => { const st = (W.meat && W.meat[k]) || 0; o.e.enabled = st < 2; if (st === 0) { o.e.setLocalPosition(o.q.x, o.q.hy - 0.95, 0.1); o.e.setLocalEulerAngles(0, 0, Math.sin(T * 0.8 + k) * 6); } else if (st === 1) { o.e.setLocalPosition(o.q.x, o.q.y + 0.75, 0.1); o.e.setLocalEulerAngles(0, 0, 80); } });
     (this.blooms || []).forEach((o, i) => { const gone = !!(W.blooms && W.blooms[i]); if (o.cap.enabled === gone) { o.cap.enabled = !gone; o.st.enabled = gone; o.h.enabled = !gone; } if (!gone) { const s = 1 + Math.sin(T * 2.3 + o.bl.x) * 0.06; o.cap.setLocalScale(s, s, s); lit.push({ x: o.bl.x, y: o.bl.y + 0.4, z: 0.6, r: 1.6, col: [0.7, 0.8, 0.6], k: 0.6, pri: 0 }); } });
     for (const o of this.presses || []) o.e.setLocalPosition(o.p.x + (pressWarn(o.p, T) ? Math.sin(T * 60) * 0.03 : 0), o.p.top - (o.p.top - o.p.y) * pressDown(o.p, T), 0);
     for (const o of this.fumes || []) o.e.setLocalPosition(Math.sin(T * 0.3 + o.f.x0) * 0.6, Math.sin(T * 0.5 + o.f.x0) * 0.15, 0);

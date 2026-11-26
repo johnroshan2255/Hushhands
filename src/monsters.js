@@ -12,9 +12,10 @@ import * as pc from 'playcanvas';
 import { addSphere, addLathe, addCylinder } from './meshes.js';
 import { mats, ent, sharedMesh, stickMesh, setStick, addBeam, ink } from './scene.js';
 import { newDrinker, thinkDrinker, packDrinker, unpackDrinker, DrinkerView } from './creatures/drinker.js';
+import { newGlutton, thinkGlutton, packGlutton, unpackGlutton, GluttonView } from './creatures/glutton.js';
 
 // creatures that live in their own files: kind -> { make, think, pack, unpack, View }
-export const KINDS = { drinker: { make: newDrinker, think: thinkDrinker, pack: packDrinker, unpack: unpackDrinker, View: DrinkerView } };
+export const KINDS = { drinker: { make: newDrinker, think: thinkDrinker, pack: packDrinker, unpack: unpackDrinker, View: DrinkerView }, glutton: { make: newGlutton, think: thinkGlutton, pack: packGlutton, unpack: unpackGlutton, View: GluttonView } };
 export function viewFor(app, m) { return m.kind === 'crawler' ? new CrawlerView(app, m) : m.kind === 'collector' ? new CollectorView(app, m) : new KINDS[m.kind].View(app, m); }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
