@@ -11,7 +11,7 @@ export function kit(n, meta = {}) {
   const L = {
     n, nb, ...meta,
     solids: [], plates: [], gates: [], levers: [], traps: [], worms: [], hooks: [], cps: [], bells: [], slabs: [], cogs: [], rings: [], kill: [], shears: [], monsters: [], deco: [], hints: [], zones: [],
-    waters: [], crates: [], valves: [], rooms: [], lamps: [], mud: [], blooms: [], fumes: [], sacks: [], meat: [], boards: [], candles: [], dust: [], buttons: [], others: [], tally: [], drawings: [], bodiesOf: [], presses: [], swarms: [], eels: [], creaky: [], exit: null,
+    waters: [], crates: [], valves: [], rooms: [], lamps: [], mud: [], blooms: [], fumes: [], sacks: [], meat: [], boards: [], candles: [], dust: [], buttons: [], others: [], tally: [], drawings: [], bodiesOf: [], presses: [], swarms: [], eels: [], creaky: [], ends: [], exit: null,
   };
   const solid = (x0, y0, x1, y1, o = {}) => { const s = { x0, y0, x1, y1, ...o }; L.solids.push(s); return s; };
   const ground = (x0, x1, top, o = {}) => solid(x0, top - 30, x1, top, { ground: true, ...o });

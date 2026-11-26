@@ -55,6 +55,12 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Moth Tower
+  tower: ['Climb. Something is filling the tower under you', 'Climb. Something is filling the tower under you'],
+  mothed: ['MOTHS ARE EATING YOU. Get to a flame', 'MOTHS ARE EATING YOU. Get to a flame'],
+  weaver: ['The Weaver. Half eaten. Still stitching', 'The Weaver. Half eaten. Still stitching'],
+  choice: ['The Spindle, or the crack of daylight. All of you, together, at one of them', 'The Spindle, or the crack of daylight. All of you, together, at one of them'],
+  choice1: ['The Spindle, or the crack of daylight. Stand at the one you choose', 'The Spindle, or the crack of daylight. Stand at the one you choose'],
   // the Upturned Loom
   upside: ['Here the halls hang from the roof. Walk on.', 'Here the halls hang from the roof. Walk on.'],
   drum: [`The lever turns the whole hall over. Hold ${K('SHIFT')} as it turns, or fall its height`, 'The lever turns the whole hall over. Press HOLD as it turns, or fall its height'],
@@ -138,7 +144,7 @@ async function boot() {
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed' || hintKey === 'holdfast');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed' || hintKey === 'holdfast' || hintKey === 'mothed');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;
@@ -362,11 +368,18 @@ async function boot() {
   addEventListener('touchstart', () => { if (!touchUI) { touchUI = true; setState(state); } }, { passive: true });
 
   // ---- the end
+  const ENDINGS = {
+    wind: ['THE TURNING', 'You gave yourselves to the Spindle. The light came back, and the Loom went on. Somewhere at the bottom, a new doll woke in the scrap, tied to a lantern.'],
+    cut: ['OUTSIDE', 'You cut the thread at the top and climbed out into the daylight. Behind you the Loom went dark and came apart, and everything in it.'],
+    unpick: ['THE WHOLE CLOTH', 'With its eyes back, the Weaver unpicked its own stitches instead of yours. The cages opened. Every doll walked out with you, into the light.'],
+  };
   function showEnd(s) {
     const mm = Math.floor(s.time / 60), ss = Math.floor(s.time % 60);
     const whole = s.deaths === 0;
+    const E = ENDINGS[s.ending] || ENDINGS.wind;
+    $('eSmall').textContent = E[0];
     $('eTitle').textContent = whole ? (s.n === 1 ? 'THE WHOLE DOLL' : 'UNBROKEN') : s.cut > 0 ? 'THE SEVERED CORD' : 'MENDED';
-    $('eLine').textContent = whole ? (s.n === 1 ? 'You carried the thread home, and never once let it fall.' : 'Not one of you was lost. The thread came home as it left.') : s.cut > 0 ? 'The thread was cut on the way, and knotted, and carried on.' : (s.n === 1 ? 'You fell, and got up, and brought the thread home.' : 'You fell, and were pulled back, and brought the thread home.');
+    $('eLine').textContent = `${s.split ? 'You could not agree, and the thread snapped; the most of you had their way. ' : ''}${E[1]}`;
     $('eStats').textContent = `${mm}:${String(ss).padStart(2, '0')}  ·  ${s.deaths === 0 ? 'no falls' : s.deaths === 1 ? '1 fall' : `${s.deaths} falls`}  ·  ${s.n === 1 ? 'alone' : `${s.n} together`}`;
     const guest = net.online && !net.isHost;
     show('eAgain', !guest);

@@ -14,9 +14,10 @@ import { mats, ent, sharedMesh, stickMesh, setStick, addBeam, ink } from './scen
 import { newDrinker, thinkDrinker, packDrinker, unpackDrinker, DrinkerView } from './creatures/drinker.js';
 import { newGlutton, thinkGlutton, packGlutton, unpackGlutton, GluttonView } from './creatures/glutton.js';
 import { newPuppeteer, thinkPuppeteer, packPuppeteer, unpackPuppeteer, PuppeteerView } from './creatures/puppeteer.js';
+import { newMoths, thinkMoths, packMoths, unpackMoths, MothsView } from './creatures/moths.js';
 
 // creatures that live in their own files: kind -> { make, think, pack, unpack, View }
-export const KINDS = { drinker: { make: newDrinker, think: thinkDrinker, pack: packDrinker, unpack: unpackDrinker, View: DrinkerView }, glutton: { make: newGlutton, think: thinkGlutton, pack: packGlutton, unpack: unpackGlutton, View: GluttonView }, puppeteer: { make: newPuppeteer, think: thinkPuppeteer, pack: packPuppeteer, unpack: unpackPuppeteer, View: PuppeteerView } };
+export const KINDS = { drinker: { make: newDrinker, think: thinkDrinker, pack: packDrinker, unpack: unpackDrinker, View: DrinkerView }, glutton: { make: newGlutton, think: thinkGlutton, pack: packGlutton, unpack: unpackGlutton, View: GluttonView }, puppeteer: { make: newPuppeteer, think: thinkPuppeteer, pack: packPuppeteer, unpack: unpackPuppeteer, View: PuppeteerView }, moths: { make: newMoths, think: thinkMoths, pack: packMoths, unpack: unpackMoths, View: MothsView } };
 export function viewFor(app, m) { return m.kind === 'crawler' ? new CrawlerView(app, m) : m.kind === 'collector' ? new CollectorView(app, m) : new KINDS[m.kind].View(app, m); }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));

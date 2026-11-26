@@ -578,11 +578,31 @@
     yield* roomWalk('gallery', 135.2, { hop, brace: true });
     yield* toExit();
   };
-  S['spindle:0'] = function* () { // the spindle
-    const R = L().rings;
-    if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }
-    else yield* walkTo(R[N() - 1 - role()].x, { wait: false });
-    yield* until(() => W().phase === 'won', 60 * 40, 'the spindle');
+  // ---- the Moth Tower: ledge to ledge, burning off moths at the candles; then the choice
+  const H = 2.4;
+  const ledgeNo = () => Math.round(b().y / H);
+  /** from wherever I stand, up the next ledges until ledge 'to' (the top is ledge 15) */
+  function* climb(to) {
+    for (let k = 0; k < 40 && ledgeNo() < to; k++) {
+      chk();
+      if (G.me.mothed != null) { const c = L().candles.find((q) => Math.abs(q.y - b().y) < 0.5); if (c) { yield* walkTo(c.x, { wait: false, tol: 0.4 }); yield* until(() => G.me.mothed == null, 60 * 4, 'the moths burning'); } }
+      const next = ledgeNo() + 1, right = next % 2 === 1;
+      // to the edge nearest the next ledge, then jump at it and push
+      yield* walkTo(right ? 12.15 : 13.85, { wait: false, tol: 0.08 });
+      hold(right ? 'KeyD' : 'KeyA'); hold('Space');
+      yield* until(() => (b().ground && !b().mantle && Math.abs(b().y - next * H) < 0.15) || (b().ground && b().vy <= 0 && !b().mantle && ledgeNo() < next && b().t > 0 && Math.abs(b().y - (next - 1) * H) < 0.1 && (k = k) && false), 100, 'the jump');
+      release('Space'); release('KeyD'); release('KeyA');
+      yield* frames(4);
+    }
+  }
+  S['spindle:0'] = function* () { yield* climb(5); yield* walkTo(L().cps[1].x - role() * 0.6, { wait: false }); };
+  S['spindle:1'] = function* () { yield* climb(10); yield* walkTo(L().cps[2].x + role() * 0.6, { wait: false }); };
+  S['spindle:2'] = function* () { yield* climb(15); yield* walkTo(L().cps[3].x + 0.6 - role() * 0.6, { wait: false }); };
+  S['spindle:3'] = function* () {
+    yield* gather();
+    const want = window.__botEnding || 'wind', z = L().ends.find((q) => q.kind === want);
+    yield* walkTo((z.x0 + z.x1) / 2 + (role() - (N() - 1) / 2) * 1.1, { wait: false });
+    yield* until(() => W().phase === 'won', 60 * 40, 'the end');
   };
 
   function* journey() {

@@ -306,6 +306,20 @@ export class Scene {
         bx(mb, x - 0.2, x + d.w + 0.2, y - 0.25, y + 0.15, -2.2, 2.2, ink(1.2));
         for (let sx = x; sx < x + d.w; sx += 0.9) bx(mb, sx, sx + 0.06, y - 3, y, 2.25, 2.35, ink(0.8));
         break;
+      case 'weaver': { // the Weaver: a huge hunched shape at its frame, long fingers still stitching; half of it gone
+        const z = -2.2;
+        addSphere(mb, { x: x - 0.6, y: y + 3.2, z, r: 1.6, sy: 1.3, segW: 12, segH: 8, colFn: () => ink(), jitter: 0.25, rng });
+        addSphere(mb, { x: x + 0.7, y: y + 4.6, z: z + 0.3, r: 0.7, sy: 1.1, segW: 10, segH: 7, colFn: () => ink() }); // its head, bowed
+        for (const [ax, ay] of [[0.6, 3.4], [1.0, 3.0]]) { addBeam(mb, x + ax, y + ay, x + ax + 1.6, y + ay - 1.2, z + 0.6, 0.18, 0.18, ink(), 0.1); for (let f = 0; f < 4; f++) addBeam(mb, x + ax + 1.6, y + ay - 1.2, x + ax + 2.3 + f * 0.1, y + ay - 1.9 - f * 0.15, z + 0.6, 0.05, 0.05, ink(), 0.015); }
+        for (let i = 0; i < 9; i++) { const hx = x - 1.6 + rng() * 2.2, hy = y + 2.2 + rng() * 2.4; addSphere(mb, { x: hx, y: hy, z: z + 1.5, r: 0.12 + rng() * 0.2, segW: 6, segH: 4, colFn: () => rgba(0.75, 0.76, 0.68, 0) }); } // where it has been eaten through
+        addBeam(mb, x - 2.4, y, x - 1.2, y + 3.6, z - 0.4, 0.3, 0.3, ink()); addBeam(mb, x + 3.4, y, x + 3.0, y + 2.6, z - 0.4, 0.2, 0.2, ink()); // its frame
+        for (let i = 0; i < 12; i++) addBeam(mb, x + 2.6, y + 2.2, x + 3.2 + rng() * 2, y + 0.1, z, 0.012, 0.012, ink(2)); // threads to the cloth
+        break;
+      }
+      case 'daylight': // a crack in the tower wall, and something pale beyond it
+        bx(mb, x - 3, x - 0.25, y, y + 11, -1.5, 2.6, ink()); bx(mb, x + 0.25, x + 3, y, y + 11, -1.5, 2.6, ink());
+        for (let i = 0; i < 6; i++) addBeam(mb, x - 0.3 + rng() * 0.6, y + i * 1.8, x - 0.3 + rng() * 0.6, y + i * 1.8 + 1.8, -1.6, 0.4 + rng() * 0.3, 0.3, rgba(0.95, 0.96, 0.9, 1));
+        break;
       case 'curtains': // heavy stage drapes, hanging in folds, torn at the hem
         for (let cx = x; cx < x + d.w; cx += 0.85 + rng() * 0.5) { const top = y + 9.1, len = 3.2 + Math.sin(cx * 1.7) * 0.8 + rng() * 1.2; addBeam(mb, cx, top, cx + Math.sin(cx * 3.1) * 0.15, top - len, -3.2 - (Math.floor(cx * 2) % 2) * 0.3, 0.42, 0.25, ink(0.9 + (Math.floor(cx * 2) % 2) * 0.3), 0.3); }
         bx(mb, x - 0.5, x + d.w + 0.5, y + 8.6, y + 9.2, -3.6, -2.8, ink());
@@ -510,7 +524,7 @@ export class Scene {
     // water
     this.waters = [];
     for (const W of L.waters) {
-      if (W.look === 'rats') continue; // (a tide of rats is drawn by the rats)
+      if (W.look) continue; // (a tide of rats, or the Moth Mother, is drawn by itself)
       const m = this.mesh((mb) => { const q = (y0, y1, c0, c1) => { const k = mb.count; mb.vert(0, y0, 0, 0, 0, 1, c0); mb.vert(1, y0, 0, 0, 0, 1, c0); mb.vert(1, y1, 0, 0, 0, 1, c1); mb.vert(0, y1, 0, 0, 0, 1, c1); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3); }; q(-1, 0, rgba(0.02, 0.035, 0.035, 0.86), rgba(0.05, 0.08, 0.08, 0.66)); });
       const top = this.mesh((mb) => { const k = mb.count; for (const [x, y] of [[0, -0.07], [1, -0.07], [1, 0], [0, 0]]) mb.vert(x, y, 0, 0, 0, 1, rgba(0.62, 0.7, 0.68, y ? 0.1 : 0.55)); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3); });
       if (W.kind === 'vat' && !this.M.vat) { this.M.vat = tintMaterial(); this.M.vat.setParameter('uTint', new Float32Array([0.55, 0.04, 0.03, 1])); }
@@ -580,6 +594,7 @@ export class Scene {
     for (const o of this.lamps || []) { const l = o.l, held = l.by >= 0, fl = 0.9 + Math.sin(T * 11 + l.x0) * 0.07; o.e.setLocalPosition(l.x, l.y + (held ? 0.55 : 0), held ? 0.35 : 0.25); o.e.setLocalEulerAngles(0, 0, held ? Math.sin(T * 5) * 8 : 0); o.f.setLocalScale(1, fl, 1); lit.push({ x: l.x, y: l.y + 0.7, z: 0.6, r: (l.r || 2.6) + 1.4, col: [1, 0.62, 0.26], k: 2.1 * fl, pri: 4 }); }
     for (const o of this.eels || []) { const ph = eelAt(o.e, T); o.body.setLocalPosition(o.e.x + Math.sin(T * 0.7 + o.e.x) * 0.8, o.e.y + Math.sin(T * 1.3) * 0.15, 0.6); o.body.setLocalEulerAngles(0, 0, Math.sin(T * 2.2 + o.e.x) * 8); const g = ph.glow; o.glow.enabled = g > 0.02; if (g > 0.02) { const s = ph.flash ? o.e.r * 0.9 : 0.5 + g * 0.9; o.glow.setLocalPosition(o.body.getLocalPosition().x, o.e.y + (ph.flash ? 0.6 : 0), 1.4); o.glow.setLocalScale(s, s * (ph.flash ? 0.6 : 1), s); lit.push({ x: o.e.x, y: o.e.y + 0.8, z: 1, r: ph.flash ? o.e.r + 2 : 2.5, col: [0.72, 0.9, 1], k: ph.flash ? 3 : g * 0.9, pri: 2 }); } }
     for (const o of this.candles || []) { const fl = 0.85 + Math.sin(T * 13 + o.c.x) * 0.08 + Math.sin(T * 31 + o.c.x * 3) * 0.05; o.f.enabled = o.h.enabled = !o.c.out; if (o.c.out) continue; o.f.setLocalScale(1, fl, 1); o.h.setLocalScale(0.7 * fl, 0.9 * fl, 0.7); lit.push({ x: o.c.x, y: o.c.y + 1.2, z: 0.4, r: 4.8, col: [1, 0.6, 0.25], k: 1.7 * fl, pri: 1 }); }
+    for (const dd of this.L.deco) if (dd.kind === 'daylight') lit.push({ x: dd.x, y: dd.y + 3, z: 0.5, r: 9, col: [0.95, 0.96, 0.9], k: 1.4, pri: 2 });
     if (this.L.exit) { const e = this.L.exit; lit.push({ x: e.x + 0.6, y: e.y + 2, z: -0.4, r: 4.2, col: [0.78, 0.84, 0.8], k: 0.9 + Math.sin(T * 0.8) * 0.1, pri: 0 }); }
     const ease = (o, to, rate) => { o.k += (to - o.k) * Math.min(1, dt * rate); return o.k; };
     for (const o of this.gates) { const k = ease(o, W.open[o.g.id] ? 1 : 0, 3.2); o.e.setLocalPosition(o.g.x, o.g.y - k * (o.g.h + 0.7) + (k > 0.02 && k < 0.97 ? Math.sin(T * 60) * 0.015 : 0), 0); }

@@ -15,6 +15,7 @@ import { unlatch, DRAIN } from './creatures/drinker.js';
 import { RatsView, litAt } from './creatures/rats.js';
 import { GRUB } from './creatures/puppeteer.js';
 import { roomAt, roomState, flip, spin, frameSpace, TURN, WARN } from './rooms.js';
+import { MotherView } from './creatures/moths.js';
 import { FX } from './fx.js';
 import { Gore } from './gore.js';
 
@@ -97,7 +98,8 @@ export class Game {
     this.pressBeats = L.presses.map(() => null);
     for (const l of L.lamps) { l.by = -1; l.x = l.x0 ?? l.x; l.y = l.y0 ?? l.y; l.x0 = l.x; l.y0 = l.y; }
     this.rats = L.swarms.length || L.waters.some((w) => w.look === 'rats') ? new RatsView(app, L, this.low ? 0 : 2) : null;
-    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {}, rot: {}, grub: {} };
+    this.mothers = L.waters.filter((w) => w.look === 'mother').map((w) => new MotherView(app, w));
+    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {}, rot: {}, grub: {}, endT: 0, splitT: 0 };
     this.mon = L.monsters.map(newMonster);
     this.monViews = L.monsters.map((m) => viewFor(app, m));
     if (tripped) for (const m of this.mon) if (m.kind === 'collector') m.mode = 'down';
@@ -137,6 +139,7 @@ export class Game {
     this.threads?.destroy(); this.threads = null;
     this.spoolView?.destroy(); this.spoolView = null;
     this.rats?.destroy(); this.rats = null;
+    for (const m of this.mothers || []) m.destroy(); this.mothers = [];
     for (const s of this.strings || []) s?.destroy(); this.strings = [];
     for (const v of this.monViews || []) v.destroy();
     this.monViews = [];
@@ -309,7 +312,7 @@ export class Game {
     const next = L.cps[W.cp + 1];
     if (next && bodies.some((b) => b.real && !b.dead && b.x >= next.x - 0.6 && Math.abs(b.y - next.y) < 3)) { W.cp++; this.emit({ t: 'cp', k: W.cp }); }
     // the water comes in once someone is well inside
-    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && b.y < w.floor + 7)) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); if (w.lock) { W.open[w.lock] = false; this.emit({ t: 'shut', id: w.lock }); } }
+    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && (w.anyY || b.y < w.floor + 7))) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); if (w.lock) { W.open[w.lock] = false; this.emit({ t: 'shut', id: w.lock }); } }
     // rot: it creeps along the thread to whoever is tied, and in time takes a doll apart
     for (const [k, t0] of Object.entries(H.rot)) {
       const i = +k, p = this.players[i];
@@ -355,6 +358,9 @@ export class Game {
         else if (e.t === 'trip') this.emit({ t: 'trip', mi, x: e.x });
         else if (e.t === 'crash') { W.tripped = true; const g = L.monsters[mi].gate; if (g) W.open[g] = true; this.emit({ t: 'crash', mi, x: e.x }); if (g) this.emit({ t: 'gate', id: g }); }
         else if (e.t === 'hear') this.emit({ t: 'hear', mi });
+        else if (e.t === 'moths') this.emit({ t: 'moths', mi, who: e.i });
+        else if (e.t === 'mburn') this.emit({ t: 'mburn', mi, who: e.i, x: e.x, y: e.y });
+        else if (e.t === 'eaten') { const p = this.players[e.i]; if (p && !p.b.dead) this.kill(e.i, 'moths', p.b.x, p.b.y, mi); }
         else if (e.t === 'grub') { if ((H.grub[e.i] || 0) <= T) { H.grub[e.i] = T + GRUB; this.emit({ t: 'grub', who: e.i, on: true, mi }); } }
         else if (e.t === 'rise' || e.t === 'bite') this.emit({ t: `g${e.t}`, mi, x: e.x });
         else if (e.t === 'eat') { const p = this.players[e.i]; if (p && !p.b.dead) this.kill(e.i, 'swallowed', p.b.x, p.b.y, mi); }
@@ -365,6 +371,17 @@ export class Game {
         else if (e.t === 'burn' || e.t === 'ash') this.emit({ t: e.t, mi, x: e.x, y: e.y });
       }
     });
+    // the end: everyone standing at one of the ends together (Wind, Cut, or, with every button, Unpick)
+    if (L.ends.length) {
+      const live = bodies.filter((b) => b.real && !b.dead);
+      const zoneOf = (b) => L.ends.find((z) => (z.kind !== 'unpick' || W.found.filter((f) => f[0] === 'b').length >= 12) && b.x > z.x0 && b.x < z.x1 && Math.abs(b.y - z.y) < 0.8);
+      const zs = live.map(zoneOf);
+      if (live.length && zs.every(Boolean)) {
+        const kinds = [...new Set(zs.map((z) => z.kind))];
+        if (kinds.length === 1) { H.endT += dt; H.splitT = 0; if (H.endT > 1.4) { W.phase = 'won'; this.emit({ t: 'win', time: T - (this.runT0 ?? 0) + (this.timeBefore || 0), d: W.deaths, cut: W.cut, ending: kinds[0] }); } }
+        else { H.splitT += dt; H.endT = 0; if (H.splitT > 2.2) { const count = {}; for (const z of zs) count[z.kind] = (count[z.kind] || 0) + 1; const win = Object.keys(count).sort((a, c) => count[c] - count[a] || (a === 'cut' ? -1 : 1))[0]; W.phase = 'won'; this.emit({ t: 'win', time: T - (this.runT0 ?? 0) + (this.timeBefore || 0), d: W.deaths, cut: W.cut + 1, ending: win, split: true }); } }
+      } else { H.endT = 0; H.splitT = 0; }
+    }
     // the spindle: every ring stood in at once
     L.rings.forEach((r, i) => { W.rings[i] = on(r.x, r.y, 0.8); });
     if (L.rings.length && L.rings.every((r, i) => W.rings[i])) { H.ringT += dt; if (H.ringT > 1.1) { W.phase = 'won'; this.emit({ t: 'win', time: T - (this.runT0 ?? 0), d: W.deaths, cut: W.cut }); } } else H.ringT = 0;
@@ -387,6 +404,8 @@ export class Game {
       case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
       case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
       case 'turnAt': W.turnAt[e.id] = e.t0; break;
+      case 'moths': { const p = this.players[e.who]; if (!p) break; p.mothed = e.mi; sfx.play('flutter', { x: p.b.x, vol: 1.5 }); if (p.me) { this.hud.flash('#d8dccb', 0.25, 120); fx.shake(0.2); } break; }
+      case 'mburn': { const p = this.players[e.who]; if (p) p.mothed = null; sfx.play('flame', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 20, { power: 1.2 }); fx.burst('dust', e.x, e.y, 0.3, 8, { spread: 1 }); break; }
       case 'grub': { const p = this.players[e.who]; if (!p) break; p.grub = e.on; if (e.on) { sfx.play('squirm', { x: p.b.x, vol: 1.2 }); sfx.play('clack', { x: p.b.x }); fx.burst('ink', p.b.x, p.b.y + 1.1, 0.3, 6, { power: 0.5 }); if (p.me) { this.hud.flash('#2b2b20', 0.45, 160); fx.shake(0.3); } } else { sfx.play(e.how === 'burn' ? 'flame' : 'squirm', { x: p.b.x }); fx.burst(e.how === 'burn' ? 'ember' : 'ink', p.b.x, p.b.y + 1.1, 0.3, 12, { power: 0.8 }); } break; }
       case 'pfall': { const m = this.mon[e.mi]; if (m) m.mode = 'fallen'; sfx.play('snip', { x: m?.x }); sfx.play('crash', { x: m?.x }); sfx.play('groan', { x: m?.x, vol: 1.5 }); fx.shake(1); this.swing = 1; for (const p of this.players) p.grub = false; break; }
       case 'meat': { W.meat[e.k] = e.state; const q = L.meat[e.k]; if (e.state === 1) { sfx.play('land', { x: q.x, vol: 1 }); sfx.play('squelch', { x: q.x }); fx.shake(0.2); } else { sfx.play('chomp', { x: q.x }); fx.burst(q.poison ? 'spore' : 'dye', q.x, q.y + 0.4, 0.3, 14, { power: 1 }); } break; }
@@ -502,7 +521,7 @@ export class Game {
     for (const w of this.L.waters) if (w.lock && !(w.drain && W.open[w.drain])) W.open[w.lock] = true;
     for (const c of this.L.crates) { const keep = c.x0 < this.L.cps[e.cp].x - 1 && c.x > this.L.cps[e.cp].x; if (!keep) { c.x = c.x0; c.y = c.y0; c.vx = c.vy = 0; c.tx = c.ty = undefined; } }
     this.drainAt = {}; this.eelBeat = {}; this.ratT = 0; W.swarm = []; W.blooms = []; W.meat = [];
-    for (const p of this.players) { p.rot = null; p.grub = false; p.b.hold = null; p.b.flungY = null; }
+    for (const p of this.players) { p.rot = null; p.grub = false; p.mothed = null; p.b.hold = null; p.b.flungY = null; }
     for (const r of this.L.rooms) if (r.lever && this.L.cps[e.cp].x < r.x0) { W.turnAt[r.id] = null; W.open[r.lever] = false; }
     if (this.host) this.host.rot = {};
     const cpx = this.L.cps[e.cp].x;
@@ -824,7 +843,7 @@ export class Game {
         if (this.linksFor(this.meIdx).some((o) => o.id !== 'spool' && wet(o))) { b.stun = 1.1; this.fx.shake(0.4); this.hud.flash('#cfe8ff', 0.35, 90); }
       }
     }
-    for (let i = 0; i < L.waters.length; i++) { const w = L.waters[i]; if (w.kind === 'race' && b.x > w.x0 && b.x < w.x1 && W.wl[i] > b.y + (w.look === 'rats' ? 0.3 : 0.95) && b.y < w.y1) return this.die(w.look === 'rats' ? 'stripped' : 'water'); if (w.kind === 'bog' && b.x > w.x0 && b.x < w.x1 && b.y < W.wl[i] - 0.25) return this.die('water'); if (w.kind === 'vat' && b.x > w.x0 && b.x < w.x1 && b.y < W.wl[i] - 0.15) return this.die('dyed'); }
+    for (let i = 0; i < L.waters.length; i++) { const w = L.waters[i]; if (w.kind === 'race' && b.x > w.x0 && b.x < w.x1 && W.wl[i] > b.y + (w.look ? 0.3 : 0.95) && b.y < w.y1) return this.die(w.look === 'rats' ? 'stripped' : w.look === 'mother' ? 'moths' : 'water'); if (w.kind === 'bog' && b.x > w.x0 && b.x < w.x1 && b.y < W.wl[i] - 0.25) return this.die('water'); if (w.kind === 'vat' && b.x > w.x0 && b.x < w.x1 && b.y < W.wl[i] - 0.15) return this.die('dyed'); }
     for (let i = 0; i < L.shears.length; i++) {
       const s = L.shears[i], beat = shearsBeat(s, T);
       if (this.beats[i] !== null && beat !== this.beats[i]) { this.sfx.play('snip', { x: s.x }); if (Math.abs(b.x - s.x) < 0.5 && b.y < s.y + 3.4 && b.y > s.y - 1) { this.beats[i] = beat; return this.die('shears'); } }
@@ -850,6 +869,7 @@ export class Game {
       if (this.latchT > 0) key = 'latched';
       else if (this.me.rot != null) key = 'rotting';
       else if (this.me.grub) key = 'grubbed';
+      else if (this.me.mothed != null) key = 'mothed';
       else if (this.inTurningRoom(b)) key = 'holdfast';
       else if (this.wormT > 0) key = 'wormed';
       else { const f = this.players.find((p) => !p.me && p.wormed && Math.abs(p.b.x - b.x) < 9); if (f) { key = 'friendWormed'; vars = { name: f.name }; } const g = this.players.find((p) => !p.me && p.latched != null && Math.abs(p.b.x - b.x) < 9); if (g) { key = 'friendLatched'; vars = { name: g.name }; } }
@@ -1006,6 +1026,7 @@ export class Game {
     if (!this.attract) this.dread(dt, T, live);
     fx.update(dt);
     this.gore.update(dt);
+    for (const [k, mv] of (this.mothers || []).entries()) { const w = L.waters.filter((q) => q.look === 'mother')[k]; mv.update(dt, W.wT0[w.id] != null ? W.wl[w.i] : null, T); for (const c of L.candles) c.out = W.wT0[w.id] != null && W.wl[w.i] > c.y + 0.7; }
     if (this.rats) {
       this.rats.update(dt, T, W.swarm, this.lights(), (i) => (W.wT0[L.waters[i].id] != null ? W.wl[i] : null), this.cam.x);
       if (live && (this.squealT -= dt) <= 0) { this.squealT = 0.6 + Math.random() * 1.4; const near = L.swarms.find((s, i) => W.swarm[i] && this.cam.x > s.x0 - 8 && this.cam.x < s.x1 + 8); if (near) sfx.play('squeal', { x: this.cam.x + (Math.random() - 0.5) * 14, vol: 0.7 }); }
@@ -1025,6 +1046,8 @@ export class Game {
       x0 = Math.min(x0, sx); x1 = Math.max(x1, sx); y0 = Math.min(y0, sy); y1 = Math.max(y1, sy);
     }
     if (x0 === Infinity) { x0 = x1 = this.cam.x; y0 = y1 = this.cam.y - 2.7; }
+    // something rising under you: the camera lets you see it coming
+    for (const w of L.waters) if (w.look === 'mother' && W.wT0[w.id] != null && W.wl[w.i] > me.b.y - 9) y0 = Math.min(y0, W.wl[w.i] - 1.5);
     const cam = R.cam, aspect = Math.max(0.3, this.app.graphicsDevice.width / Math.max(1, this.app.graphicsDevice.height));
     // wide screens see far to the sides; tall ones (a phone held upright) see less to the sides and
     // more above, with the ground lifted clear of the thumbs
@@ -1060,7 +1083,7 @@ export class Game {
       this.hud.tags(tags);
     }
     // ---- the end
-    if (W.phase === 'won' && this.wonT > 5 && !this.ended) { this.ended = true; this.hud.end({ n: this.n, time: this.result?.time ?? 0, deaths: this.result?.d ?? W.deaths, cut: this.result?.cut ?? W.cut }); }
+    if (W.phase === 'won' && this.wonT > 5 && !this.ended) { this.ended = true; this.hud.end({ n: this.n, time: this.result?.time ?? 0, deaths: this.result?.d ?? W.deaths, cut: this.result?.cut ?? W.cut, ending: this.result?.ending || 'wind', split: !!this.result?.split, found: W.found.length }); this.onSave?.({ done: true, ending: this.result?.ending || 'wind', deaths: W.deaths }); }
     if (W.phase !== 'won') this.ended = false;
   }
   /** how afraid to be, and everything that follows from it: the edges, the heart, the drone, the dark */
