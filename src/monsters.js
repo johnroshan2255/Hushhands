@@ -33,12 +33,12 @@ export function thinkMonster(m, dt, bodies, L, ctx) {
     for (const b of bodies) {
       if (b.dead || !b.real || b.x < Z.x0 || b.x > Z.x1 || b.y < Z.y0 || b.y > Z.y1) continue;
       // a footstep or a landing anywhere in the den; or the faintest movement right under it
-      const n = Math.max(b.noise, Math.abs(b.x - m.x) < 1.25 && Math.abs(b.vx || 0) > 0.25 ? 0.3 : 0);
+      const n = Math.max(b.noise, Math.abs(b.x - m.x) < 1.45 && Math.abs(b.vx || 0) > 0.25 ? 0.3 : 0);
       if (n >= 0.25 && (!loud || n > loud.n)) loud = { x: b.x, n };
     }
     if (loud && (m.mode === 'roam' || m.mode === 'hunt')) { if (m.mode === 'roam') ev.push({ t: 'hear', id: m.id }); m.mode = 'hunt'; m.tx = clamp(loud.x, m.x0, m.x1 + 0.5); m.t = 0; }
     switch (m.mode) {
-      case 'roam': m.x += m.dir * 1.25 * dt; if (m.x > m.x1) { m.x = m.x1; m.dir = -1; } if (m.x < m.x0) { m.x = m.x0; m.dir = 1; } break;
+      case 'roam': m.x += m.dir * 1.5 * dt; if (m.x > m.x1) { m.x = m.x1; m.dir = -1; } if (m.x < m.x0) { m.x = m.x0; m.dir = 1; } break;
       case 'hunt': { const d = m.tx - m.x; m.dir = Math.sign(d) || m.dir; m.x += clamp(d, -5.6 * dt, 5.6 * dt); if (Math.abs(d) < 0.12) { m.mode = 'wind'; m.t = 0; } break; }
       case 'wind': if (m.t > 0.55) { m.mode = 'stab'; m.t = 0; ev.push({ t: 'stab', x: m.x, id: m.id }); } break;
       case 'stab': if (m.t > 0.55) { m.mode = 'rest'; m.t = 0; } break;

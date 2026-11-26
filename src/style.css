@@ -24,6 +24,17 @@ input { font: inherit; color: inherit; }
 @keyframes grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-31px, 17px); } 50% { transform: translate(23px, -41px); } 75% { transform: translate(-47px, -19px); } 100% { transform: translate(11px, 37px); } }
 .vig { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse 82% 80% at 50% 50%, transparent 55%, rgba(4, 6, 6, 0.22) 82%, rgba(2, 3, 3, 0.55) 100%); }
 #fade { position: fixed; inset: 0; background: #020303; opacity: 0; pointer-events: none; z-index: 30; }
+/* the dread: darkness closing in, a red throb when something is in your head, a flash when it hears you */
+#dread { position: fixed; inset: 0; pointer-events: none; }
+#dread i { position: absolute; inset: 0; }
+#dread .dk { opacity: var(--dk, 0); background: radial-gradient(ellipse 58% 56% at 50% 58%, transparent 22%, rgba(0, 0, 0, 0.55) 52%, rgba(0, 0, 0, 0.92) 74%, #000 92%); }
+#dread .rd { opacity: var(--rd, 0); background: radial-gradient(ellipse 72% 68% at 50% 52%, rgba(90, 0, 0, 0.12) 20%, rgba(130, 0, 4, 0.55) 72%, rgba(40, 0, 0, 0.95) 100%); animation: throb var(--beat, 1s) ease-out infinite; }
+#dread .fl { opacity: 0; background: var(--flc, #fff); transition: opacity 0.35s ease-out; }
+#dread .fl.now { transition: none; }
+@keyframes throb { 0% { transform: scale(1.06); filter: brightness(1.5); } 18% { transform: scale(1); filter: brightness(1); } 100% { transform: scale(1); } }
+#hint.urgent { border-left-color: #c0161a; background: rgba(40, 0, 0, 0.82); color: #ffd9d4; font-size: 1.05rem; animation: rise 0.4s ease both, jitter 0.18s steps(2) infinite; }
+@keyframes jitter { 0% { transform: translate(0, 0); } 50% { transform: translate(1px, -1px); } 100% { transform: translate(-1px, 1px); } }
+@media (prefers-reduced-motion: reduce) { #dread .rd, #hint.urgent { animation: none; } }
 
 /* ---------- the title, the end ---------- */
 .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2.2rem; padding: calc(1.2rem + var(--safe-t)) calc(1.2rem + var(--safe-r)) calc(1.2rem + var(--safe-b)) calc(1.2rem + var(--safe-l)); z-index: 10; animation: rise 0.9s ease both; }
@@ -147,3 +158,28 @@ body.touching #hint { bottom: auto; top: calc(0.8rem + var(--safe-t)); max-width
   .keys { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { #grain { animation: none; } }
+
+/* ---------- i, the story, the trial ---------- */
+.round.infoBtn { right: calc(4.1rem + var(--safe-r)); font-family: var(--serif); font-style: italic; font-size: 1.25rem; color: var(--fog); }
+#menu .round.infoBtn { right: auto; left: calc(0.8rem + var(--safe-l)); }
+.panel.wide { width: min(40rem, 100%); gap: 0.6rem; }
+.panel.wide h3 { font-size: 0.72rem; letter-spacing: 0.24em; color: var(--amber); margin-top: 0.5rem; }
+.panel.wide p, .panel.wide li { font-size: 0.88rem; line-height: 1.55; color: var(--fog); }
+.panel.wide .dangers { list-style: none; display: flex; flex-direction: column; gap: 0.45rem; padding: 0; }
+.panel.wide .dangers b { color: #fff; }
+.panel .row { flex-wrap: wrap; }
+.overlay.story { background: #020303; flex-direction: column; gap: 2.4rem; z-index: 40; }
+.story .tale { max-width: 34rem; display: flex; flex-direction: column; gap: 1.1rem; text-align: center; font-family: var(--serif); font-size: clamp(1rem, 2.4vw, 1.3rem); line-height: 1.6; color: var(--fog); }
+.story .tale p { opacity: 0; transform: translateY(0.4rem); transition: opacity 1.4s ease, transform 1.4s ease; }
+.story .tale p.on { opacity: 1; transform: none; }
+.story .tale .goal { border-top: 1px solid rgba(255, 165, 58, 0.4); border-bottom: 1px solid rgba(255, 165, 58, 0.4); padding: 0.9rem 0; color: #fff; }
+.story .tale .goal small { display: block; font-family: var(--sans, sans-serif); font-size: 0.7rem; letter-spacing: 0.3em; color: var(--amber); margin-bottom: 0.4rem; }
+.story .tale .last { color: #c0161a; letter-spacing: 0.08em; }
+.story .row { display: flex; gap: 0.8rem; }
+.story .btn { min-width: 9rem; border-color: var(--fog2); color: var(--fog); }
+#trial { position: absolute; left: 50%; top: calc(0.9rem + var(--safe-t)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 0.15rem; padding: 0.55rem 1.3rem 0.6rem; background: rgba(8, 10, 10, 0.72); border-bottom: 2px solid var(--amber); color: var(--fog); text-align: center; animation: rise 0.4s ease both; }
+#trial small { font-size: 0.66rem; letter-spacing: 0.28em; color: var(--amber); }
+#trial b { font-family: var(--serif); font-weight: 500; font-size: 1.25rem; letter-spacing: 0.08em; }
+#trial span { font-size: 0.84rem; color: var(--fog2); }
+#trial.done b { color: var(--amber); }
+body.touching #trial { top: auto; bottom: calc(5.5rem + var(--safe-b)); }

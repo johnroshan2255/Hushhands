@@ -15,11 +15,14 @@
   <canvas id="app" tabindex="0"></canvas>
   <div id="grain" aria-hidden="true"></div>
   <div class="vig" aria-hidden="true"></div>
+  <div id="dread" aria-hidden="true"><i class="dk"></i><i class="rd"></i><i class="fl"></i></div>
   <div id="tags" aria-hidden="true"></div>
 
   <!-- ============ in play ============ -->
   <div id="hud" hidden>
     <button id="bPause" class="round" aria-label="Pause"><i></i><i></i></button>
+    <button id="bInfo" class="round infoBtn" aria-label="The story, the goal and how to play">i</button>
+    <div id="trial" hidden><small id="trN">TRIAL 1 / 6</small><b id="trT">Walk</b><span id="trK"></span></div>
     <div id="roomChip" hidden></div>
     <div id="card" aria-live="polite"><b id="cardT"></b><span id="cardS"></span></div>
     <div id="hint" hidden></div>
@@ -35,6 +38,7 @@
 
   <!-- ============ title ============ -->
   <section id="menu" class="screen" hidden>
+    <button class="round infoBtn" id="mInfo" aria-label="The story, the goal and how to play">i</button>
     <div class="title">
       <small>THE</small>
       <h1>THREAD&#8209;BEARERS</h1>
@@ -80,6 +84,43 @@
         <button class="btn primary" id="lStart">SET OUT</button>
         <button class="btn ghost" id="lLeave">LEAVE</button>
       </div>
+    </div>
+  </section>
+
+  <!-- ============ the story, before the first journey ============ -->
+  <section id="story" class="overlay story" hidden>
+    <div class="tale" id="taleLines">
+      <p>Before there were dolls, there was the Loom.</p>
+      <p>It spun us out of sackcloth and one thread of light, and tied us waist to waist, so that none of us would ever be lost.</p>
+      <p>Then the Great Spindle stopped turning.</p>
+      <p>The light is going out of the thread. Things have crawled up out of the dark of the Loom to unpick what is left of us. They listen for footsteps. They hang from the ceilings. They crawl into heads.</p>
+      <p>You are the last of us still tied.</p>
+      <p class="goal"><small>THE GOAL</small>Carry the thread through the Loom to the Great Spindle, stand together in its rings, and wind it home.</p>
+      <p class="last">Do not let go. Do not let anything in.</p>
+    </div>
+    <div class="row"><button class="btn primary" id="sBegin">BEGIN</button><button class="btn ghost" id="sSkip">SKIP</button></div>
+  </section>
+
+  <!-- ============ i: the story, the goal, how to play, what hunts you ============ -->
+  <section id="info" class="overlay" hidden>
+    <div class="panel wide">
+      <h2>THE THREAD-BEARERS</h2>
+      <h3>THE STORY</h3>
+      <p>The Great Spindle that spun every doll has stopped, and the dark is unpicking what is left. You are the last few still tied together by one glowing thread.</p>
+      <h3>THE GOAL</h3>
+      <p>Reach the <b>Great Spindle</b> at the far end of the Loom, every one of you, and stand in its rings together. Each lantern you reach is where you come back to when something gets you.</p>
+      <h3>HOW TO PLAY</h3>
+      <div class="keys" id="iKeys"></div>
+      <h3>WHAT HUNTS YOU</h3>
+      <ul class="dangers">
+        <li><b>The crawler</b> is blind. It hangs from the den's roof and listens. Creep under it; stand still when it is over you.</li>
+        <li><b>The worms</b> strike from the ceilings. One that catches you does not kill you: it gets <b>into your head</b> and walks you. Hammer JUMP to tear it out. With friends, it walks you at them; it will kill whoever it reaches. Get close to a friend with a worm and press USE to rip it out.</li>
+        <li><b>The bells</b> wake the Choir above. Creep under the hanging ones, jump the wires.</li>
+        <li><b>The shears</b> cut anything between their blades, the thread too. Go through together.</li>
+        <li><b>The Collector</b> hears every step. Stretch the thread across its path and hold fast: it will trip.</li>
+        <li><b>Some things do not show themselves</b> until it is too late. Watch the ground. Listen.</li>
+      </ul>
+      <div class="row"><button class="btn primary" id="iClose">BACK</button><button class="btn" id="iTrial">PLAY THE TRIAL</button><button class="btn ghost" id="iStory">THE STORY AGAIN</button></div>
     </div>
   </section>
 

@@ -34,19 +34,24 @@
   };
   /** walk (or creep) to x, hopping what is in the way; o: { sneak, tol, wait (for the other), stop() } */
   function* walkTo(x, o = {}) {
-    let i = 0, jumpT = 0;
-    while (Math.abs(b().x - x) > (o.tol || 0.15)) {
+    let i = 0, jumpT = 0, hopping = false, hopDir = 0;
+    for (;;) {
+      // a hop once begun is seen through, still pushing the same way: letting go of jump and the
+      // stick at the target, mid-air, would cut it short (over a trip-wire, onto the wire)
+      // (and landing past the target is arriving: walking back would be back onto what was hopped)
+      if (hopping && jumpT <= 0 && b().ground) { hopping = false; if ((x - b().x) * hopDir < (o.tol || 0.15)) break; }
+      if (Math.abs(b().x - x) <= (o.tol || 0.15) && !hopping) break;
       chk();
       if (++i > 60 * 50) throw new Error(`stuck walking to ${x.toFixed(1)}`);
-      const dir = Math.sign(x - b().x);
+      const dir = hopping ? hopDir : Math.sign(x - b().x);
       let go = true;
-      if (o.stop && o.stop()) go = false;
+      if (o.stop && o.stop() && !hopping) go = false;
       const m = dir > 0 ? behind() : body(G.meIdx - 1);
-      if (go && m && o.wait !== false && (b().x - m.x) * dir > 5.4) go = false; // don't drag the one behind
+      if (go && m && o.wait !== false && !hopping && (b().x - m.x) * dir > 5.4) go = false; // don't drag the one behind
       if (o.sneak) hold('KeyS'); else release('KeyS');
       if (go) { hold(dir > 0 ? 'KeyD' : 'KeyA'); release(dir > 0 ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); }
       if (go && b().ground && wallAhead(dir) && jumpT <= 0) jumpT = 14;
-      if (go && o.hop && b().ground && o.hop(dir) && jumpT <= 0) jumpT = 10;
+      if (go && o.hop && b().ground && o.hop(dir) && jumpT <= 0) { jumpT = 10; hopping = true; hopDir = dir; }
       if (jumpT > 0) { hold('Space'); jumpT--; if (jumpT === 0) release('Space'); }
       yield;
     }
@@ -279,9 +284,23 @@
     }
   }
   const run = journey();
-  G.app.on('update', () => {
+  // Every count above is in steps of 1/60 s (a 14-step jump, a 60 * 50 step limit), so think at 60 Hz
+  // of game time whatever the screen's refresh: at 144 Hz a frame-counting bot jumps short and gives up early.
+  const STEP = 1 / 60;
+  let acc = 0;
+  G.app.on('update', (dt) => {
     if (bot.done || bot.failed) return;
+    acc += dt;
+    if (acc < STEP - 1e-4) return;
+    acc = Math.min(acc - STEP, STEP);
     bot.frames++;
+    // a worm in my head: drop everything and hammer jump until it is out (a friend may rip it out too)
+    if (G.wormT > 0) {
+      if (!bot.ridden) { bot.ridden = true; releaseAll(); say('a worm got in'); }
+      if (bot.frames % 6 === 0) key('keydown', 'Space'); else if (bot.frames % 6 === 3) key('keyup', 'Space');
+      return;
+    }
+    if (bot.ridden) { bot.ridden = false; key('keyup', 'Space'); say('tore it out'); }
     try { const r = run.next(); if (r.done) { bot.done = !bot.failed; releaseAll(); } } catch (e) { bot.failed = `${bot.sec}: ${e.message}`; releaseAll(); }
   });
 })();

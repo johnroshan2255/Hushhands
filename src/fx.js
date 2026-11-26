@@ -7,7 +7,7 @@ import { worldMaterial, glowMaterial, tintMaterial } from './render.js';
 const KINDS = {
   glass: { mat: 'glow', col: [0.75, 0.9, 0.88, 0.5], size: [0.05, 0.16], grav: 16, life: [0.7, 1.3], spin: 14, speed: [1.5, 4.5], up: 1.5 },
   ink: { mat: 'world', col: [0.04, 0.043, 0.042, 0], size: [0.05, 0.15], grav: 16, life: [0.6, 1.1], spin: 12, speed: [1.5, 5], up: 3 },
-  dust: { mat: 'tint', col: [0.56, 0.6, 0.59, 0.4], size: [0.12, 0.3], grav: -0.5, life: [0.5, 1.0], spin: 0, speed: [0.3, 1.2], up: 0.3, grow: 2, round: true },
+  dust: { mat: 'tint', col: [0.16, 0.17, 0.17, 0.32], size: [0.06, 0.15], grav: -0.4, life: [0.45, 0.9], spin: 0, speed: [0.25, 0.9], up: 0.2, grow: 1.6, round: true }, // dark soft smoke, not pale blobs
   ember: { mat: 'glow', col: [1, 0.62, 0.22, 1], size: [0.03, 0.06], grav: -1.2, life: [0.5, 1.2], spin: 0, speed: [0.4, 1.8], up: 1.0, round: true },
   spark: { mat: 'glow', col: [1, 0.75, 0.4, 1], size: [0.03, 0.06], grav: 9, life: [0.25, 0.55], spin: 0, speed: [1.5, 4.5], up: 1.5 },
   drop: { mat: 'tint', col: [0.7, 0.78, 0.76, 0.6], size: [0.04, 0.09], grav: 14, life: [0.4, 0.8], spin: 0, speed: [1, 3.5], up: 3, round: true },
@@ -19,7 +19,7 @@ export class FX {
     const device = app.graphicsDevice;
     this.mats = { world: worldMaterial(), glow: glowMaterial(1), tint: tintMaterial() };
     const chip = (() => { const mb = new MeshBuilder(); addBox(mb, { sx: 1, sy: 0.25, sz: 0.7, col: rgba(1, 1, 1, 1) }); return mb.build(device); })();
-    const puff = (() => { const mb = new MeshBuilder(); addSphere(mb, { r: 0.5, segW: 7, segH: 5, colFn: () => rgba(1, 1, 1, 1) }); return mb.build(device); })();
+    const puff = (() => { const mb = new MeshBuilder(); addSphere(mb, { r: 0.5, segW: 14, segH: 9, colFn: () => rgba(1, 1, 1, 1) }); return mb.build(device); })();
     const disc = (() => { const mb = new MeshBuilder(); addCylinder(mb, { r0: 0.5, r1: 0.5, h: 0.12, seg: 10, capBottom: true, colFn: () => rgba(1, 1, 1, 1) }); return mb.build(device); })();
     this.meshes = { chip, puff, disc };
     this.pool = [];

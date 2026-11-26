@@ -14,6 +14,8 @@ export async function launch() {
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function page(browser, url, { viewport = { width: 1280, height: 720 }, ...more } = {}) {
   const ctx = await browser.newContext({ viewport, ...more });
+  // a returning player: the story has been told and the trial done (TB_FRESH=1 to be a new one)
+  if (!process.env.TB_FRESH) await ctx.addInitScript(() => { try { localStorage.setItem('tb.story', '1'); localStorage.setItem('tb.trial', 'done'); } catch { /* */ } });
   const p = await ctx.newPage();
   p.errors = [];
   p.on('pageerror', (e) => p.errors.push(`pageerror: ${e.message}`));

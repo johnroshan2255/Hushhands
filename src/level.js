@@ -43,7 +43,8 @@ export function buildLevel(n) {
   // ---------------------------------------------------------------- 1. the bear-trap meadow, then the worm bed
   const m0 = x + 3;
   ground(x - 3 + 0.001, m0 + 60, y);
-  for (const dx of [5, 10.4, 14, 20.5, 25, 28.6]) L.traps.push({ x: m0 + dx, y });
+  // every other trap lies under the grass and only shows itself when you are all but on it
+  for (const [i, dx] of [5, 10.4, 14, 20.5, 25, 28.6].entries()) L.traps.push({ x: m0 + dx, y, hidden: i % 2 === 1 });
   deco('grass', m0 - 2, y, { w: 36 });
   for (const [i, dx] of [36, 40.2, 44.4].entries()) L.worms.push({ x: m0 + dx, y, dir: 1, period: 3.4, up: 1.1, off: i * 1.1, len: 2.6 });
   deco('bones', m0 + 33, y); deco('tree', m0 + 31, y); deco('tree', m0 + 48.5, y, { s: 1.3 }); deco('tree', m0 + 8, y, { s: 1.6, far: true }); deco('tree', m0 + 19, y, { s: 1.1, far: true });
@@ -71,7 +72,8 @@ export function buildLevel(n) {
   const xt = xf + 12;
   ground(xf + 24 - 0.001, xt + 80, y);
   solid(xt, y + 2.9, xt + 24, y + 18);
-  for (const [i, dx] of [5, 9.5, 14, 18.5].entries()) L.worms.push({ x: xt + dx, y: y + 2.9, dir: -1, period: 3.0, up: 1.0, off: i * 0.75, len: 2.5 });
+  // six ceiling worms, quicker than before; two of them give no warning at all
+  for (const [i, dx] of [3.4, 6.9, 10.4, 13.9, 17.4, 20.9].entries()) L.worms.push({ x: xt + dx, y: y + 2.9, dir: -1, period: 2.7, up: 0.95, off: i * 0.62, len: 2.5, silent: i === 2 || i === 4 });
   deco('pipes', xt, y + 2.9, { w: 24 });
   const xa = xt + 30; // the den
   cp(xa - 4, y, 'THE DEN');

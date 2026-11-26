@@ -4,7 +4,9 @@
 // Alone, you are the host and nothing goes over the wire.
 import { buildLevel, LINK, wormOut, wormWarn, shearsBeat, waterLevel } from './level.js';
 import { Space, newBody, stepPlayer, stepSpool, newSpool, linkLen, WAIST, HT, HT_LOW, GRAV } from './phys.js';
-import { Scene, mats, ent, halo, AMBER } from './scene.js';
+import { Scene, mats, ent, halo, AMBER, sharedMesh, ink } from './scene.js';
+import { addLathe } from './meshes.js';
+import { glowMaterial } from './render.js';
 import { Threads, SpoolView } from './rope.js';
 import { Rig } from './chars.js';
 import { newMonster, thinkMonster, packMonster, unpackMonster, CrawlerView, CollectorView } from './monsters.js';
@@ -14,6 +16,12 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const NONE = { x: 0, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
 const F = { ground: 1, braced: 2, sneak: 4, right: 8, hang: 16, dead: 32, mantle: 64, use: 128, climb: 256, caged: 512, taut: 1024 };
 const SCALE = 0.68; // a doll is small
+const RED = [1, 0.12, 0.08];
+let redMat = null;
+const redGlow = () => { if (!redMat) { redMat = glowMaterial(2.4); redMat.setParameter('uTint', new Float32Array([1, 0.16, 0.12, 1])); } return redMat; };
+// the worm that gets into a head: how long it gives you, alone and with others
+const TAKES_ALONE = 5.5, TAKES_TOGETHER = 10;
+const R01 = Math.random;
 const bits = (arr) => arr.reduce((m, v, i) => (v ? m | (1 << i) : m), 0);
 const unbits = (m, n) => Array.from({ length: n }, (_, i) => !!(m & (1 << i)));
 
@@ -52,16 +60,24 @@ export class Game {
     this.attract = attract;
     this.paused = false;
     this.meIdx = Math.max(0, order.findIndex((o) => o.id === meId));
+    const dev = app.graphicsDevice;
+    const wormM = sharedMesh(dev, 'headworm', (mb) => addLathe(mb, [[0.075, 0], [0.085, 0.09], [0.06, 0.18], [0.075, 0.27], [0.05, 0.37], [0.06, 0.45], [0.03, 0.53], [0.0, 0.58]], { seg: 7, colFn: () => ink() }));
     this.players = order.map((o, i) => {
-      const rig = new Rig(app, { kind: 'doll', variant: o.slot });
+      const rig = new Rig(app, { variant: o.slot });
       rig.root.setLocalScale(SCALE, SCALE, SCALE);
-      const h = ent(app.root, halo(app.graphicsDevice), mats().glow, 0, 0, 0.3, 90);
-      return { id: o.id, name: o.name, slot: o.slot, i, me: i === this.meIdx, b: newBody(0, 0), rig, halo: h, net: null, use: false, noise: 0, stepD: 0, wasTaut: false, hid: false, fall: false };
+      const h = ent(app.root, halo(dev), mats().glow, 0, 0, 0.3, 90);
+      // what shows when a worm is in this one's head: its tail thrashing out of the top, an eye gone red
+      const worm = ent(rig.head, wormM, mats().world, 0.02, 0.4, -0.03); worm.enabled = false;
+      const eye = ent(app.root, halo(dev), redGlow(), 0, 0, 0.36, 91); eye.enabled = false;
+      return { id: o.id, name: o.name, slot: o.slot, i, me: i === this.meIdx, b: newBody(0, 0), rig, halo: h, worm, eye, wormed: false, lungeT: 0, net: null, use: false, noise: 0, stepD: 0, wasTaut: false, hid: false, fall: false };
     });
+    // the dread: how afraid this screen should be right now, and what keeps it company
+    this.dreadK = 0; this.beatT = 0; this.ambT = 6 + R01() * 6; this.eyesT = 10 + R01() * 8; this.blackT = 0; this.watchers = [];
+    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.lungeCd = 0; this.wormSafe = 0; this.jerkT = 0; this.jerkDir = 0; this.squirmT = 0;
     this.spool = n === 1 ? newSpool(0, 0) : null;
     this.spoolView = this.spool ? new SpoolView(app) : null;
     this.W = { open: { ...open }, plates: [], levers: [], traps: [], slabs: [], wake: 0, scream: false, waterT0: null, water: L.water.y0, cp, rings: [], won: 0, phase: 'play', deaths, cut, epoch: 0, tripped, bell: {} };
-    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null) };
+    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {} };
     this.mon = L.monsters.map(newMonster);
     this.monViews = L.monsters.map((m) => (m.kind === 'crawler' ? new CrawlerView(app, m) : new CollectorView(app, m)));
     if (tripped) for (const m of this.mon) if (m.kind === 'collector') m.mode = 'down';
@@ -82,8 +98,12 @@ export class Game {
   stop() {
     if (!this.running && !this.scene) return;
     this.running = false;
-    for (const p of this.players) { p.rig.destroy(); p.halo.destroy(); }
+    for (const p of this.players) { p.rig.destroy(); p.halo.destroy(); p.eye.destroy(); }
     this.players = [];
+    for (const w of this.watchers || []) w.e.destroy();
+    this.watchers = [];
+    this.wormT = 0;
+    this.sfx.drone(0); this.sfx.duck(1); this.hud.dread?.(0, 0, 60);
     this.scene?.destroy(); this.scene = null;
     this.threads?.destroy(); this.threads = null;
     this.spoolView?.destroy(); this.spoolView = null;
@@ -148,10 +168,24 @@ export class Game {
   hostIntent(i, from) {
     const W = this.W, T = this.T();
     if (W.phase !== 'play') return;
+    const H = this.host;
     if (i.t === 'die') {
       if (i.why === 'trap' && i.k != null) W.traps[i.k] = true;
-      const p = this.players[from];
-      this.kill(from, i.why, p ? p.b.x : 0, p ? p.b.y : 0, i.k);
+      // a worm-ridden one reaching a friend: the friend dies, if the worm is still in there
+      const who = i.why === 'possessed' ? i.victim : from;
+      if (i.why === 'possessed' && !H.wormed[from]) return;
+      const p = this.players[who];
+      this.kill(who, i.why, p ? p.b.x : 0, p ? p.b.y : 0, i.why === 'possessed' ? from : i.k);
+    } else if (i.t === 'possess') { // a worm got in (on) or was shaken out (off)
+      if (!!H.wormed[from] === !!i.on) return;
+      H.wormed[from] = !!i.on;
+      this.emit({ t: 'possess', who: from, on: !!i.on, how: 'shook' });
+    } else if (i.t === 'rip') { // a friend tears the worm out of i.k
+      if (!H.wormed[i.k]) return;
+      H.wormed[i.k] = false;
+      this.emit({ t: 'possess', who: i.k, on: false, how: 'ripped', by: from });
+    } else if (i.t === 'lunge') {
+      if (H.wormed[from]) this.emit({ t: 'lunge', who: from });
     } else if (i.t === 'bell') {
       if (T - (this.host.bellT[i.k] ?? -9) < 1.2) return;
       this.host.bellT[i.k] = T;
@@ -165,6 +199,7 @@ export class Game {
     if (W.phase !== 'play') return;
     W.deaths++;
     if (why === 'cut') W.cut++;
+    this.host.wormed = {};
     this.host.respawnAt = this.T() + (why === 'caged' ? 2.6 : 2.0);
     this.emit({ t: 'die', who, why, x, y, k, d: W.deaths });
   }
@@ -247,7 +282,29 @@ export class Game {
       case 'shatter': { W.slabs[e.k] = 2; const s = L.slabs[e.k]; sfx.play('glass', { x: s.x0 + 1.3 }); for (let x = s.x0 + 0.3; x < s.x1; x += 0.6) fx.burst('glass', x, s.y - 0.1, 0, 5, { spread: 0.7 }); break; }
       case 'bell': { this.bellAt[e.k] = this.T(); const b = L.bells[e.k]; sfx.play(b.kind === 'hang' ? 'bell' : 'tinybell', { x: b.x }); W.wake = Math.max(W.wake, 0.6); break; }
       case 'stab': { const m = this.mon[e.mi]; sfx.play('stab', { x: e.x }); fx.shake(0.4); fx.burst('dust', e.x, m.y - 4.1, 0.3, 8, { spread: 1 }); const b = this.me?.b; if (b && !b.dead && !this.dying && W.phase === 'play' && Math.abs(b.x - e.x) < 0.8 && b.y < m.y - 1 && b.y > m.y - 5.2) this.die('crawler'); break; }
-      case 'hear': { const m = this.mon[e.mi]; sfx.play(m.kind === 'crawler' ? 'skitter' : 'groan', { x: m.x }); break; }
+      case 'hear': { // it heard you: the scare
+        const m = this.mon[e.mi];
+        sfx.play(m.kind === 'crawler' ? 'skitter' : 'groan', { x: m.x });
+        if (!this.attract && Math.abs(m.x - this.cam.x) < 20) {
+          if (m.kind === 'crawler') { sfx.play('shriek', { x: m.x }); fx.shake(0.75); this.hud.flash('#fff', 0.32, 70); this.blackT = 0.9; }
+          else { sfx.play('roar', { x: m.x }); fx.shake(0.65); this.hud.flash('#3a0000', 0.45, 160); this.blackT = 0.5; }
+        }
+        break;
+      }
+      case 'possess': {
+        const p = this.players[e.who];
+        if (!p) break;
+        p.wormed = e.on; p.lungeT = 0;
+        const [hx, hy] = [p.b.x, p.b.y + 1.0];
+        if (e.on) { sfx.play('burrow', { x: hx }); fx.burst('ink', hx, hy, 0.3, 14, { power: 0.9 }); if (p.me) { fx.shake(0.8); this.hud.flash('#5a0000', 0.6, 220); } }
+        else {
+          sfx.play('rip', { x: hx }); fx.burst('ink', hx, hy + 0.2, 0.3, 18, { power: 1.2, dir: [0, 1.2, 0] });
+          if (p.me) { this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.wormSafe = 1.6; this.hud.flash('#fff', 0.25, 60); }
+          if (e.how === 'ripped') { const by = this.players[e.by]; this.hud.toast(`${by ? by.name : 'Someone'} tore the worm out of ${p.name}.`); }
+        }
+        break;
+      }
+      case 'lunge': { const p = this.players[e.who]; if (p) { p.lungeT = 0.01; sfx.play('lunge', { x: p.b.x }); } break; }
       case 'trip': sfx.play('groan', { x: e.x }); sfx.play('twang', { x: e.x, vol: 2 }); break;
       case 'crash': W.tripped = true; W.open.g7 = true; sfx.play('crash', { x: e.x }); fx.shake(1); for (let i = 0; i < 6; i++) fx.burst('dust', e.x - 3 + i * 1.2, this.mon[e.mi].y + 0.3, 0.6, 6, { spread: 1.4 }); break;
       case 'die': this.onDie(e); break;
@@ -275,10 +332,17 @@ export class Game {
         case 'caged': b.dead = false; b.caged = true; this.caught = p.i; this.caughtBy = e.k ?? 0; sfx.play('grunt', { x }); break;
         case 'water': sfx.play('splash', { x }); fx.burst('drop', x, y + 1, 0.5, 10); break;
         case 'shears': p.hid = true; sfx.play('snip', { x }); fx.burst('ink', x, y + 0.6, 0, 16, { power: 1.1 }); break;
+        case 'possessed': sfx.play('stab', { x }); sfx.play('crunch', { x }); fx.burst('ink', x, y + 0.6, 0, 20, { power: 1.2 }); break;
+        case 'taken': sfx.play('taken', { x }); fx.burst('ink', x, y + 1.0, 0.3, 22, { power: 1.3, dir: [0, 1.4, 0] }); break;
         default: break;
       }
       b.vx = 0; if (!p.fall) b.vy = 0;
     }
+    if (e.why === 'possessed') { const k = this.players[e.k], v = victims[0]; if (k && v) this.hud.toast(`The worm in ${k.name} killed ${v.name}.`); }
+    for (const p of this.players) { p.wormed = false; p.lungeT = 0; }
+    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0;
+    this.hud.flash('#4a0000', 0.55, 180);
+    sfx.play('sting', { x: victims[0]?.b.x });
     if (e.why === 'cut') { sfx.play('snip', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 26, { power: 1.6 }); this.cutT = 0.01; }
     if (e.why === 'choir') { W.scream = true; sfx.play('scream'); fx.shake(0.8); }
     sfx.play('die', { x: victims[0]?.b.x });
@@ -290,6 +354,8 @@ export class Game {
     const W = this.W;
     W.epoch = e.ep; W.cp = e.cp; W.phase = 'play'; W.traps = []; W.slabs = []; W.wake = 0; W.scream = false; W.waterT0 = null; W.plates = []; W.levers = []; W.rings = [];
     this.bellAt = {}; this.bellMine = {}; this.dying = false; this.cutT = 0;
+    for (const p of this.players) { p.wormed = false; p.lungeT = 0; }
+    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.wormSafe = 1;
     if (!this.isHost) this.mon = this.L.monsters.map((m, i) => (m.kind === 'collector' && W.tripped ? this.mon[i] : newMonster(m)));
     this.place(e.cp);
     const c = this.L.cps[e.cp];
@@ -315,7 +381,11 @@ export class Game {
       // ---- me
       const can = W.phase === 'play' && !this.attract && !this.paused && (this.startedAt == null || T > 0);
       const hanging = b.hang;
-      const inp = can ? { x: input.dirX, y: input.dirY, jump: input.tap('jump') || (!hanging && input.tap('up') && !this.input.touch.y), jumpHeld: input.held('jump') || input.held('up'), brace: input.held('brace'), sneak: input.dirY < 0 } : NONE;
+      let inp = can ? { x: input.dirX, y: input.dirY, jump: input.tap('jump') || (!hanging && input.tap('up') && !this.input.touch.y), jumpHeld: input.held('jump') || input.held('up'), brace: input.held('brace'), sneak: input.dirY < 0 } : NONE;
+      this.wormSafe = Math.max(0, this.wormSafe - dt);
+      if (can && this.wormT > 0 && !b.dead) inp = this.ridden(dt, T) || inp;
+      // close to a friend with a worm in them: USE tears it out
+      if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); }
       const links = W.phase === 'play' ? this.linksFor(this.meIdx) : [];
       if (b.dead || b.caged) this.deadBody(me, dt);
       else stepPlayer(b, inp, dt, space, links);
@@ -383,6 +453,44 @@ export class Game {
     if (p.fall) { b.vy = Math.max(-30, b.vy - GRAV * dt); b.y += b.vy * dt; }
   }
 
+  /** a worm has got into my head */
+  possessMe() {
+    if (this.wormT > 0 || this.wormSafe > 0 || this.dying) return;
+    this.wormT = 0.001; this.shakeOut = 0; this.lungeT = 0; this.lungeCd = 1.0; this.jerkT = 0;
+    this.me.wormed = true;
+    this.intent({ t: 'possess', on: true });
+  }
+  /**
+   * While it rides me: it walks me (at the nearest friend, or alone, about), I fight it by hammering
+   * jump. Returns the input it gives in place of mine, or null once it is out.
+   */
+  ridden(dt, T) {
+    const b = this.me.b, input = this.input, sfx = this.sfx;
+    this.wormT += dt;
+    if (input.tap('jump') || (this.input.touch && input.tap('up'))) { this.shakeOut += 0.13; sfx.play('squirm', { x: b.x, vol: 1 }); this.fx.shake(0.18); this.fx.burst('ink', b.x, b.y + 1.0, 0.3, 2, { power: 0.4 }); }
+    this.shakeOut = Math.max(0, this.shakeOut - 0.16 * dt);
+    if (this.shakeOut >= 1) { this.wormT = 0; this.wormSafe = 1.6; this.intent({ t: 'possess', on: false }); return null; }
+    if ((this.squirmT -= dt) <= 0) { this.squirmT = 0.5 + R01() * 0.7; sfx.play('squirm', { x: b.x, vol: 0.6 }); }
+    if (this.wormT > (this.n > 1 ? TAKES_TOGETHER : TAKES_ALONE)) { this.wormT = 0; this.die('taken'); return null; }
+    // whom it wants
+    let prey = null, pd = Infinity;
+    for (const p of this.players) { if (p.me || p.hid || p.b.dead) continue; const d = Math.abs(p.b.x - b.x) + Math.abs(p.b.y - b.y) * 0.5; if (d < pd) { pd = d; prey = p; } }
+    let x = 0;
+    if (prey) x = Math.abs(prey.b.x - b.x) > 0.45 ? Math.sign(prey.b.x - b.x) : 0;
+    else { if ((this.jerkT -= dt) <= 0) { this.jerkT = 0.2 + R01() * 0.45; this.jerkDir = [-1, 0, 1, 1, -1][Math.floor(R01() * 5)]; } x = this.jerkDir; }
+    // close enough: it winds up and strikes through me
+    this.lungeCd = Math.max(0, this.lungeCd - dt);
+    if (prey && this.lungeT <= 0 && this.lungeCd <= 0 && Math.abs(prey.b.x - b.x) < 0.9 && Math.abs(prey.b.y - b.y) < 1.2) { this.lungeT = 0.001; this.intent({ t: 'lunge' }); }
+    if (this.lungeT > 0) {
+      this.lungeT += dt; x = 0;
+      if (this.lungeT > 0.55) {
+        this.lungeT = 0; this.lungeCd = 1.1;
+        if (prey && !prey.b.dead && Math.abs(prey.b.x - b.x) < 1.05 && Math.abs(prey.b.y - b.y) < 1.3) this.intent({ t: 'die', why: 'possessed', victim: prey.i });
+      }
+    }
+    return { x, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
+  }
+
   /** the things that can end me */
   dangers(T) {
     const { L, W } = this, b = this.me.b;
@@ -394,7 +502,8 @@ export class Game {
       if (Math.abs(b.x - w.x) > 0.44) continue;
       const out = wormOut(w, T);
       if (out < 0.3) continue;
-      if (w.dir > 0 ? b.y < w.y + w.len * out - 0.1 && b.y + h > w.y : b.y + h > w.y - w.len * out + 0.1 && b.y < w.y) return this.die('worm');
+      // it doesn't kill you: it gets in
+      if (w.dir > 0 ? b.y < w.y + w.len * out - 0.1 && b.y + h > w.y : b.y + h > w.y - w.len * out + 0.1 && b.y < w.y) { this.possessMe(); break; }
     }
     if (b.x > L.water.x0 && b.x < L.water.x1 && W.water > b.y + 0.95 && b.y < L.water.y1) return this.die('water');
     for (let i = 0; i < L.shears.length; i++) {
@@ -413,15 +522,35 @@ export class Game {
   /** the one line of help at the bottom, and what USE would do */
   prompts(can) {
     const { L, hud } = this, b = this.me.b;
-    let key = null, use = null;
+    let key = null, use = null, vars = {};
     if (can && !b.dead) {
       for (const hnt of L.hints) if (b.x >= hnt.x0 && b.x <= hnt.x1) key = hnt.text;
-      if (b.hang && (key === 'chasm' || key === 'chasm1' || !key)) key = 'hang';
+      // tied on both sides (the middle of three or four), you climb toward whichever side you push
+      if (b.hang && (key === 'chasm' || key === 'chasm1' || !key)) key = this.meIdx > 0 && this.meIdx < this.n - 1 ? 'hangMid' : 'hang';
+      key = this.collectorHint(b) || key;
+      if (this.wormT > 0) key = 'wormed';
+      else { const f = this.players.find((p) => !p.me && p.wormed && Math.abs(p.b.x - b.x) < 9); if (f) { key = 'friendWormed'; vars = { name: f.name }; } }
       if (this.nearLever(b) >= 0) use = 'HOLD';
       else if (this.spool) use = this.spool.mode === 'follow' ? (this.nearHook(b) ? 'HANG' : b.ground ? 'SET' : null) : this.spool.mode === 'return' ? null : 'CALL';
     }
-    if (key !== this.hintKey) { this.hintKey = key; hud.hint(key); }
+    const hk = key ? `${key}:${vars.name || ''}` : null;
+    if (hk !== this.hintKey) { this.hintKey = hk; hud.hint(key, vars); }
     if (use !== this.useLabel) { this.useLabel = use; hud.use(use); }
+  }
+  /** at the Collector, say what is wrong with the line you are making, and what to do next */
+  collectorHint(b) {
+    const { L, W } = this, k = L.monsters.find((m) => m.kind === 'collector');
+    if (!k || W.tripped || b.x < k.x0 - 6 || b.x > k.x1 + 4) return null;
+    if (this.spool) {
+      const s = this.spool;
+      if (s.mode !== 'planted') return null; // still 'set your spool down' (the area's own hint)
+      if (Math.abs(b.x - s.x) < 2.6) return 'kShort';
+      return b.braced ? 'kHold' : 'kBrace';
+    }
+    const xs = this.players.filter((p) => !p.b.dead).map((p) => p.b.x);
+    if (!b.braced) return null;
+    if (Math.max(...xs) - Math.min(...xs) < 2.6) return 'kShortAll';
+    return 'kHoldAll';
   }
 
   // ------------------------------------------------------------------ drawing
@@ -433,25 +562,42 @@ export class Game {
     const bell = {};
     for (const k in this.bellAt) bell[k] = T - this.bellAt[k];
     W.bell = bell;
+    W.meX = this.attract ? null : me.b.x;
     scene.update(dt, T, W);
-    const lights = scene.lit.slice();
+    // lanterns gutter when the dread is high, and all but go out when something hears you
+    this.blackT = Math.max(0, this.blackT - dt);
+    const gut = (this.blackT > 0 ? 0.12 + 0.88 * (1 - Math.min(1, this.blackT / 0.5)) ** 2 : 1);
+    const lights = this.attract ? scene.lit.slice() : scene.lit.map((l, i) => ({ ...l, k: l.k * gut * (this.dreadK > 0.45 ? 0.7 + 0.3 * Math.abs(Math.sin(time * (11 + i * 3.7)) * Math.sin(time * 4.1 + i)) : 1) }));
     // ---- the wanderers
     for (const p of this.players) {
       const b = p.b;
       let anim = 'walk';
-      if (b.dead) anim = 'dead'; else if (b.caged) anim = 'fear'; else if (b.mantle || b.mantling) anim = 'haul'; else if (b.braced) anim = 'brace'; else if (b.hang) anim = b.climbing ? 'ropeclimb' : 'hang'; else if (!b.ground) anim = 'air';
+      if (p.lungeT > 0) { p.lungeT += dt; if (p.lungeT > 0.6) p.lungeT = 0; }
+      const lunging = p.lungeT > 0 || (p.me && this.lungeT > 0);
+      if (b.dead) anim = 'dead'; else if (b.caged) anim = 'fear'; else if (lunging) anim = 'lunge'; else if (p.wormed && b.ground && !b.hang) anim = 'possessed'; else if (b.mantle || b.mantling) anim = 'haul'; else if (b.braced) anim = 'brace'; else if (b.hang) anim = b.climbing ? 'ropeclimb' : 'hang'; else if (!b.ground) anim = 'air';
       p.rig.setVisible(!p.hid);
       let rx = b.x, ry = b.y, tilt = 0;
       if (b.hang && !b.dead) { const o = this.anchorOf(p); if (o) { tilt = clamp(Math.atan2(-(o[0] - b.x), o[1] - (b.y + WAIST)) * 0.75, -0.9, 0.9); rx = b.x + Math.sin(tilt) * WAIST; ry = b.y + WAIST - Math.cos(tilt) * WAIST; } }
       p.tilt = (p.tilt || 0) + (tilt - (p.tilt || 0)) * Math.min(1, dt * 10);
-      p.rig.pose(dt, { x: rx, y: ry, z: 0, facing: b.facing, speed: Math.abs(b.vx) / SCALE, crouch: b.sneak, anim, t: time + p.i * 1.7, noShadow: true });
+      p.rig.pose(dt, { x: rx, y: ry, z: 0, facing: b.facing, speed: Math.abs(b.vx) / SCALE, vx: b.vx, vy: b.vy, crouch: b.sneak, anim, t: time + p.i * 1.7, noShadow: true });
       if (Math.abs(p.tilt) > 0.01) p.rig.root.rotate(0, 0, p.tilt * 57.3);
       const kx = b.x, ky = b.y + (b.sneak ? 0.36 : WAIST);
       p.halo.enabled = !p.hid;
       p.halo.setLocalPosition(kx, ky, 0.3);
       const hs = 0.27 + Math.sin(time * 6 + p.i * 2) * 0.02 + (b.braced ? 0.25 : 0);
       p.halo.setLocalScale(hs, hs, hs);
-      if (!p.hid) lights.push({ x: kx, y: ky + 0.1, z: 0.9, r: 3.0 + (b.braced ? 1 : 0), col: AMBER, k: 1.0, pri: p.me ? 3 : 1 });
+      // a worm in the head: its tail thrashes out of the top, the eye goes red, the glow sours
+      const ridden = p.wormed && !b.dead && !p.hid;
+      if (p.worm.enabled !== ridden) p.worm.enabled = ridden;
+      if (p.eye.enabled !== ridden) p.eye.enabled = ridden;
+      if (ridden) {
+        p.worm.setLocalEulerAngles(Math.sin(time * 13 + p.i) * 38, 0, Math.sin(time * 9.3) * 46 + Math.sin(time * 27) * 10);
+        const sy = 1 + Math.sin(time * 17) * 0.25; p.worm.setLocalScale(1, sy, 1);
+        const es = 0.075 + Math.sin(time * 31) * 0.015 + (lunging ? 0.06 : 0);
+        p.eye.setLocalPosition(b.x + b.facing * 0.13, b.y + (b.sneak ? 0.62 : 0.98), 0.36); p.eye.setLocalScale(es, es, es);
+        p.halo.enabled = false;
+        lights.push({ x: kx, y: ky + 0.3, z: 0.9, r: 2.4 + Math.sin(time * 23) * 0.5, col: RED, k: 1.4, pri: p.me ? 3 : 1 });
+      } else if (!p.hid) lights.push({ x: kx, y: ky + 0.1, z: 0.9, r: 3.0 + (b.braced ? 1 : 0), col: AMBER, k: 1.0, pri: p.me ? 3 : 1 });
       // sounds of moving
       if (live && !b.dead) {
         if (b.ground && Math.abs(b.vx) > 0.4) { p.stepD += Math.abs(b.vx) * dt; if (p.stepD > (b.sneak ? 0.5 : 0.7)) { p.stepD = 0; sfx.play('step', { x: b.x, crouch: b.sneak, vol: b.sneak ? 0.15 : p.me ? 0.6 : 0.4 }); if (!b.sneak && !this.low) fx.burst('dust', b.x, b.y + 0.05, 0.4, 1, { spread: 0.3, power: 0.5 }); } }
@@ -482,7 +628,7 @@ export class Game {
     // ---- the hunters
     this.mon.forEach((m, i) => {
       const v = this.monViews[i];
-      if (!this.isHost && live) { if (m.kind === 'crawler') { if (m.mode === 'roam') m.x = clamp(m.x + m.dir * 1.25 * dt, m.x0, m.x1); m.t += dt; } else m.t += dt; }
+      if (!this.isHost && live) { if (m.kind === 'crawler') { if (m.mode === 'roam') m.x = clamp(m.x + m.dir * 1.5 * dt, m.x0, m.x1); m.t += dt; } else m.t += dt; }
       if (m.kind === 'crawler') { v.update(dt, m, T, m.y - 4.2); if (live && m.mode === 'hunt' && (this.skitT = (this.skitT || 0) - dt) <= 0) { this.skitT = 0.22; sfx.play('skitter', { x: m.x, vol: 0.8 }); } }
       else { const c = this.caught >= 0 ? this.players[this.caught] : null; v.update(dt, m, T, c && m.mode === 'grab' ? { x: c.b.x, y: c.b.y } : null); const st = v.takeStomp(); if (st !== undefined && live && m.mode !== 'down') { sfx.play('stomp', { x: st, vol: 1 }); if (Math.abs(st - this.cam.x) < 16) fx.shake(0.22); fx.burst('dust', st, m.y + 0.1, 0.5, 4, { spread: 1, power: 0.6 }); } }
     });
@@ -490,15 +636,23 @@ export class Game {
     L.worms.forEach((w, i) => {
       if (Math.abs(w.x - this.cam.x) > 22) return;
       const out = wormOut(w, T), warn = wormWarn(w, T);
-      if (out > 0.05 && this.wormWas[i] <= 0.05) { sfx.play('worm', { x: w.x, vol: 0.8 }); fx.burst('dust', w.x, w.y, 0.3, 5, { dir: [0, w.dir * 0.6, 0], spread: 0.8 }); }
-      if (warn > 0 && warn < 0.5 && live && Math.random() < dt * 14) fx.burst('dust', w.x + (Math.random() - 0.5) * 0.5, w.y, 0.3, 1, { spread: 0.3, power: 0.4 });
+      if (out > 0.05 && this.wormWas[i] <= 0.05) { sfx.play('worm', { x: w.x, vol: w.silent ? 1.2 : 0.8 }); fx.burst('dust', w.x, w.y, 0.3, 5, { dir: [0, w.dir * 0.6, 0], spread: 0.8 }); }
+      // the warning trickle of dust; a silent one gives none
+      if (!w.silent && warn > 0 && warn < 0.5 && live && Math.random() < dt * 14) fx.burst('dust', w.x + (Math.random() - 0.5) * 0.5, w.y, 0.3, 1, { spread: 0.3, power: 0.4 });
       this.wormWas[i] = out;
     });
     if (W.phase === 'dead') this.deadT += dt;
+    if (!this.attract) this.dread(dt, T, live);
     fx.update(dt);
     // ---- camera: keep everyone in the picture
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-    for (const p of this.players) { if (p.fall && p.b.dead) continue; x0 = Math.min(x0, p.b.x); x1 = Math.max(x1, p.b.x); y0 = Math.min(y0, p.b.y); y1 = Math.max(y1, p.b.y); }
+    for (const p of this.players) {
+      if (p.fall && p.b.dead) continue;
+      // the camera keeps to the height you stand at, not the top of every hop; it drops with a fall
+      const b = p.b;
+      if (p.camY == null || b.ground || b.hang || b.mantle || b.dead || b.y < p.camY || b.y > p.camY + 2.6) p.camY = b.y;
+      x0 = Math.min(x0, b.x); x1 = Math.max(x1, b.x); y0 = Math.min(y0, p.camY); y1 = Math.max(y1, p.camY);
+    }
     if (this.spool && this.spool.mode !== 'return') { // a spool that has been set somewhere matters; one trailing behind only a little
       const s = this.spool, k = s.mode === 'follow' ? 2 : 99;
       const sx = clamp(s.x, me.b.x - k, me.b.x + k), sy = clamp(s.y, me.b.y - k, me.b.y + k);
@@ -513,12 +667,13 @@ export class Game {
     let th = Math.max(this.attract ? 7.4 : 8.6, (x1 - x0 + (tall ? 6 : 9)) / aspect, y1 - y0 + 6.5, (tall ? 8.6 : 12) / aspect);
     if (W.phase === 'won') th += W.won * (tall ? 4 : 9);
     th = Math.min(th, tall ? 40 : 34);
+    th *= 1 - 0.12 * this.dreadK; // fear narrows the view
     const groundAt = this.attract ? (tall ? 0.14 : 0.2) : tall ? 0.36 : this.input.usedTouch ? 0.24 : 0.19; // how far up the screen the ground sits
     const tx = (x0 + x1) / 2 + lead + (this.attract && !tall ? 3.6 : 0);
     let ty = (y0 + y1) / 2 + th * (0.5 - groundAt);
     if (W.phase === 'won') ty += W.won * 4;
-    const ck = 1 - Math.exp(-dt * 3.2);
-    this.cam.x += (tx - this.cam.x) * ck; this.cam.y += (ty - this.cam.y) * ck; this.cam.h += (th - this.cam.h) * (1 - Math.exp(-dt * 1.8));
+    const ck = 1 - Math.exp(-dt * 3.2), cky = 1 - Math.exp(-dt * (ty < this.cam.y - 1.5 ? 4 : 1.9));
+    this.cam.x += (tx - this.cam.x) * ck; this.cam.y += (ty - this.cam.y) * cky; this.cam.h += (th - this.cam.h) * (1 - Math.exp(-dt * 1.8));
     const dist = this.cam.h / (2 * Math.tan((cam.camera.fov * Math.PI) / 360));
     const [shx, shy] = fx.shakeOffset(time);
     cam.setPosition(this.cam.x + shx, this.cam.y + shy, dist);
@@ -536,6 +691,61 @@ export class Game {
     // ---- the end
     if (W.phase === 'won' && this.wonT > 5 && !this.ended) { this.ended = true; this.hud.end({ n: this.n, time: this.result?.time ?? 0, deaths: this.result?.d ?? W.deaths, cut: this.result?.cut ?? W.cut }); }
     if (W.phase !== 'won') this.ended = false;
+  }
+  /** how afraid to be, and everything that follows from it: the edges, the heart, the drone, the dark */
+  dread(dt, T, live) {
+    const { L, W, sfx, hud } = this, b = this.me.b;
+    let d = 0;
+    if (W.phase === 'play' && !b.dead) {
+      for (const m of this.mon) {
+        const dx = Math.abs(m.x - b.x);
+        if (m.kind === 'crawler') {
+          const Z = L.crawlZone;
+          if (b.x > Z.x0 - 4 && b.x < Z.x1 + 2) d = Math.max(d, 0.35 + 0.3 * Math.max(0, 1 - dx / 9) + (m.mode === 'roam' ? 0 : 0.45));
+        } else if (m.mode !== 'down' && dx < 18) d = Math.max(d, 0.25 + 0.4 * (1 - dx / 18) + (m.mode === 'hunt' || m.mode === 'grab' ? 0.4 : 0));
+      }
+      for (const w of L.worms) if (Math.abs(w.x - b.x) < 2.2) d = Math.max(d, 0.3 + 0.35 * wormOut(w, T));
+      if (L.bells.length && b.x > L.bells[0].x - 6 && b.x < L.bells[L.bells.length - 1].x + 3) d = Math.max(d, 0.3 + W.wake * 0.7);
+      if (W.waterT0 != null && b.x > L.water.x0 && b.x < L.water.x1) d = Math.max(d, 0.35 + Math.max(0, 1 - (b.y - W.water) / 4) * 0.5);
+      if (this.players.some((p) => !p.me && p.wormed)) d = Math.max(d, 0.75);
+      if (this.wormT > 0) d = 1;
+    } else if (W.phase === 'dead') d = 0.6;
+    d = Math.min(1, d);
+    this.dreadK += (d - this.dreadK) * Math.min(1, dt * (d > this.dreadK ? 2.5 : 0.8));
+    const k = this.dreadK;
+    const red = this.wormT > 0 ? 0.45 + 0.55 * Math.min(1, this.wormT / (this.n > 1 ? TAKES_TOGETHER : TAKES_ALONE)) - this.shakeOut * 0.3 : 0;
+    const bpm = 62 + 110 * k + (this.wormT > 0 ? 30 : 0);
+    hud.dread(Math.min(1, 0.15 + k * 0.85), Math.max(0, red), bpm);
+    sfx.drone(k); sfx.duck(1 - 0.75 * k);
+    if (!live) return;
+    // the heart
+    if (k > 0.3 && (this.beatT -= dt) <= 0) { this.beatT = 60 / bpm; sfx.play('heart', { vol: Math.min(1, (k - 0.2) * 1.4) }); }
+    // the dark keeps you company: a whisper, knocking, a creak, very rarely a scream far off
+    if ((this.ambT -= dt) <= 0) {
+      this.ambT = 7 + R01() * 13 - k * 4;
+      const r = R01(), x = this.cam.x + (R01() < 0.5 ? -1 : 1) * (6 + R01() * 9);
+      sfx.play(r < 0.38 ? 'whisper' : r < 0.6 ? 'knock' : r < 0.9 ? 'creak' : 'farscream', { x, vol: 0.9 });
+    }
+    // things watching from the fog: a pair of eyes that is gone when you come near
+    if ((this.eyesT -= dt) <= 0 && this.watchers.length < 2 && W.phase === 'play' && !this.low) {
+      this.eyesT = 9 + R01() * 14 - k * 5;
+      const side = R01() < 0.7 ? b.facing : -b.facing;
+      const x = b.x + side * (5 + R01() * 7), y = b.y + 0.8 + R01() * 3.2, z = -2.5 - R01() * 4;
+      const e = ent(this.app.root, null, null, x, y, z);
+      for (const sx of [-1, 1]) ent(e, halo(this.app.graphicsDevice), redGlow(), sx * 0.13, 0, 0, 92).setLocalScale(0.075, 0.075, 0.075);
+      e.setLocalScale(0.001, 0.001, 0.001);
+      this.watchers.push({ e, x, t: 0, life: 3 + R01() * 4, gone: 0 });
+    }
+    for (let i = this.watchers.length - 1; i >= 0; i--) {
+      const w = this.watchers[i];
+      w.t += dt;
+      if (!w.gone && (Math.abs(w.x - b.x) < 2.8 || w.t > w.life)) { w.gone = 0.001; if (Math.abs(w.x - b.x) < 2.8) sfx.play('whisper', { x: w.x, vol: 0.7 }); }
+      if (w.gone) w.gone += dt;
+      const open = w.gone ? Math.max(0, 1 - w.gone / 0.15) : Math.min(1, w.t / 0.8);
+      const blink = (w.t % 2.9) < 0.12 ? 0.1 : 1;
+      w.e.setLocalScale(1, Math.max(0.001, open * blink), 1);
+      if (w.gone > 0.2) { w.e.destroy(); this.watchers.splice(i, 1); }
+    }
   }
   anchorOf(p) {
     if (this.spool) { const s = this.spool; return s.mode === 'return' ? null : [s.x, s.y + s.waist]; }

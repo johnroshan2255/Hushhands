@@ -14,6 +14,42 @@ export const AMBER = [1, 0.62, 0.22];
 const TAU = Math.PI * 2, D2R = Math.PI / 180, R2D = 180 / Math.PI;
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const bx = (mb, x0, x1, y0, y1, z0, z1, col) => addBox(mb, { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2, sx: x1 - x0, sy: y1 - y0, sz: z1 - z0, col });
+/**
+ * A solid as a soft silhouette instead of a box: rounded corners, sides that wander a little like
+ * earth and old timber, the top kept true (within a hair) because feet stand on it. Extruded along z.
+ */
+function rounded(mb, x0, x1, y0, y1, z0, z1, colFn, rng) {
+  const w = x1 - x0, h = y1 - y0;
+  const rt = Math.min(0.32, w * 0.22, h * 0.3), rb = Math.min(0.7, w * 0.3, h * 0.3);
+  const out = [];
+  const arc = (cx, cy, r, a0, a1, n) => { for (let i = 0; i <= n; i++) { const a = a0 + ((a1 - a0) * i) / n; out.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } };
+  const side = (xa, ya, xb, yb, n, amp, nx) => { for (let i = 1; i < n; i++) { const k = i / n; out.push([xa + (xb - xa) * k + nx * (rng() - 0.5) * amp, ya + (yb - ya) * k]); } };
+  const top = (xa, xb, n) => { for (let i = 1; i < n; i++) { const k = i / n; out.push([xa + (xb - xa) * k, y1 - rng() * 0.025]); } };
+  const ns = Math.max(2, Math.min(12, Math.round(h / 0.9)));
+  // counter-clockwise from the bottom left
+  arc(x0 + rb, y0 + rb, rb, Math.PI, Math.PI * 1.5, 4);
+  arc(x1 - rb, y0 + rb, rb, Math.PI * 1.5, Math.PI * 2, 4);
+  side(x1, y0 + rb, x1, y1 - rt, ns, 0.12, 1);
+  arc(x1 - rt, y1 - rt, rt, 0, Math.PI / 2, 5);
+  top(x1 - rt, x0 + rt, Math.max(2, Math.round(w / 1.2)));
+  arc(x0 + rt, y1 - rt, rt, Math.PI / 2, Math.PI, 5);
+  side(x0, y1 - rt, x0, y0 + rb, ns, 0.12, -1);
+  const n = out.length, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
+  const col = (y) => colFn(Math.max(0, Math.min(1, (y - y0) / Math.max(0.01, h))));
+  // the face toward us, fanned from the middle (the outline is near enough convex)
+  const c = mb.vert(cx, cy, z1, 0, 0, 1, col(cy));
+  const f0 = mb.count;
+  for (const [x, y] of out) mb.vert(x, y, z1, 0, 0, 1, col(y));
+  for (let i = 0; i < n; i++) mb.tri(c, f0 + i, f0 + ((i + 1) % n));
+  // the rim, back into the dark
+  for (let i = 0; i < n; i++) {
+    const [ax, ay] = out[i], [bx2, by] = out[(i + 1) % n];
+    let nx = by - ay, ny = -(bx2 - ax); const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+    const k = mb.count;
+    mb.vert(ax, ay, z1, nx, ny, 0, col(ay)); mb.vert(bx2, by, z1, nx, ny, 0, col(by)); mb.vert(bx2, by, z0, nx, ny, 0, col(by)); mb.vert(ax, ay, z0, nx, ny, 0, col(ay));
+    mb.tri(k, k + 2, k + 1); mb.tri(k, k + 3, k + 2);
+  }
+}
 
 /** a bar between two points in the x-y plane: width w (w1 at the far end), depth dz */
 export function addBeam(mb, ax, ay, bx2, by, z, w, dz, col, w1 = w) {
@@ -111,6 +147,43 @@ export class Scene {
     this.lit = []; // amber lights from props, refreshed each frame
     this.buildStatic();
     this.buildProps();
+    this.buildShafts();
+  }
+  /**
+   * Light from somewhere above, falling through the gloom onto the ground in pale shafts: a slanted
+   * column, a pool where it lands, and a little real light there, so a doll walking through is lit.
+   * Where they fall is the same every time for a level; the den gets one, right where it hunts.
+   */
+  buildShafts() {
+    const L = this.L, rng = mulberry32(991 + L.n);
+    if (!this.M.shaft) { this.M.shaft = glowMaterial(0.42); this.M.shaft.setParameter('uTint', new Float32Array([0.78, 0.86, 0.84, 1])); }
+    const per = { meadow: 3, chasm: 1, den: 1, gears: 1, bridge: 2, cathedral: 1, collector: 2, spindle: 2 };
+    const spots = [];
+    for (const z of L.zones) {
+      const n = per[z.name] || 0;
+      for (let i = 0; i < n; i++) {
+        const x = z.x0 + ((i + 0.3 + rng() * 0.4) / n) * (z.x1 - z.x0), y = this.groundY(x);
+        if (y !== null) spots.push({ x, y, w: 0.9 + rng() * 1.1, slant: 1.2 + rng() * 2.2, k: z.name === 'den' ? 1.3 : 0.8 + rng() * 0.4 });
+      }
+    }
+    this.shafts = spots;
+    if (!spots.length) return;
+    this.add((mb) => {
+      for (const s of spots) {
+        const top = 14, k = mb.count, a = 0.5 * s.k;
+        // the column: narrow and faint above, wide and brighter at the ground (cols are light, not paint)
+        mb.vert(s.x - s.w * 0.35 - s.slant, s.y + top, -1.2, 0, 0, 1, rgba(1, 1, 1, 0));
+        mb.vert(s.x + s.w * 0.35 - s.slant, s.y + top, -1.2, 0, 0, 1, rgba(1, 1, 1, 0));
+        mb.vert(s.x + s.w, s.y, -1.2, 0, 0, 1, rgba(1, 1, 1, a * 0.55));
+        mb.vert(s.x - s.w, s.y, -1.2, 0, 0, 1, rgba(1, 1, 1, a * 0.55));
+        mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3);
+        // the pool on the ground: a flat bright oval, soft at the rim
+        const c = mb.vert(s.x, s.y + 0.02, 0.4, 0, 0, 1, rgba(1, 1, 1, a));
+        const r0 = mb.count;
+        for (let i = 0; i <= 20; i++) { const t = (i / 20) * Math.PI * 2; mb.vert(s.x + Math.cos(t) * s.w * 1.5, s.y + 0.02 + Math.sin(t) * 0.16, 0.4, 0, 0, 1, rgba(1, 1, 1, 0)); }
+        for (let i = 0; i < 20; i++) mb.tri(c, r0 + i, r0 + i + 1);
+      }
+    }, this.M.shaft, 89);
   }
   mesh(fn) { const mb = new MeshBuilder(); fn(mb); if (!mb.count) return null; const m = mb.build(this.device); this.own.push(m); return m; }
   add(fn, mat = this.M.world, order) { const m = this.mesh(fn); return m ? ent(this.root, m, mat, 0, 0, 0, order) : null; }
@@ -136,7 +209,8 @@ export class Scene {
       if (s.gate !== undefined) continue;
       const mb = chunk((s.x0 + s.x1) / 2);
       const z0 = s.thin ? -1.1 : -3.2, z1 = s.thin ? 1.1 : 2.4;
-      bx(mb, s.x0, s.x1, s.y0, s.y1, z0, z1, (t) => ink(0.75 + 0.5 * t));
+      if (s.thin) bx(mb, s.x0, s.x1, s.y0, s.y1, z0, z1, (t) => ink(0.75 + 0.5 * t));
+      else rounded(mb, s.x0, s.x1, s.y0, s.y1, z0, z1, (t) => ink(0.75 + 0.5 * t), rng);
       if (s.thin) { for (let x = s.x0 + 0.5; x < s.x1; x += 1.3) addBeam(mb, x, s.y0, x - 0.5, s.y0 - 1.1, -0.6, 0.12, 0.12, ink()); continue; }
       // a ragged top edge: stones and lumps, so the ground isn't a ruler line
       const w = s.x1 - s.x0;
@@ -331,7 +405,7 @@ export class Scene {
     this.levers = L.levers.map((l) => { const e = ent(root, armM, M.world, l.x, l.y + 0.25, 0); const lamp = ent(e, lampS, M.world, 0, 1.02, 0); lamp.setLocalScale(0.15, 0.15, 0.15); const h = glow(e, 0.8, 0, 1.02, 0.2); lamp.enabled = h.enabled = false; return { l, e, lamp, h, a: 38 }; });
     // bear traps: two toothed jaws
     const jawM = SM('jaw', (mb) => { bx(mb, 0, 0.5, 0, 0.05, -0.28, 0.28, ink()); for (let i = 0; i < 4; i++) { const k = mb.count, x = 0.12 + i * 0.12; mb.vert(x - 0.05, 0.05, 0, 0, 0, 1, ink()); mb.vert(x + 0.05, 0.05, 0, 0, 0, 1, ink()); mb.vert(x, 0.24, 0, 0, 0, 1, ink(1.6)); mb.tri(k, k + 1, k + 2); const k2 = mb.count; mb.vert(x - 0.05, 0.05, 0.27, 0, 0, 1, ink()); mb.vert(x + 0.05, 0.05, 0.27, 0, 0, 1, ink()); mb.vert(x, 0.24, 0.27, 0, 0, 1, ink(1.6)); mb.tri(k2, k2 + 1, k2 + 2); } });
-    this.traps = L.traps.map((t) => { const e = ent(root, null, null, t.x, t.y + 0.02, 0); const a = ent(e, jawM, M.world), b = ent(e, jawM, M.world); b.setLocalScale(-1, 1, 1); ent(e, SM('trapbase', (mb) => bx(mb, -0.14, 0.14, -0.02, 0.07, -0.2, 0.2, ink())), M.world); return { t, a, b, k: 0, v: 0 }; });
+    this.traps = L.traps.map((t) => { const e = ent(root, null, null, t.x, t.y + 0.02, 0); const a = ent(e, jawM, M.world), b = ent(e, jawM, M.world); b.setLocalScale(-1, 1, 1); ent(e, SM('trapbase', (mb) => bx(mb, -0.14, 0.14, -0.02, 0.07, -0.2, 0.2, ink())), M.world); return { t, e, a, b, k: 0, v: 0 }; });
     // worms
     const wormM = SM('worm', (mb) => {
       addLathe(mb, [[0.2, 0], [0.24, 0.15], [0.19, 0.3], [0.23, 0.45], [0.18, 0.6], [0.21, 0.74], [0.16, 0.86], [0.2, 0.93], [0.12, 1.0]], { seg: 9, colFn: () => ink() });
@@ -398,11 +472,15 @@ export class Scene {
   update(dt, T, W) {
     const lit = this.lit;
     lit.length = 0;
+    for (const s of this.shafts || []) lit.push({ x: s.x, y: s.y + 0.6, z: 0.9, r: 2.2 + s.w, col: [0.72, 0.8, 0.78], k: 0.55 * s.k, pri: 0 });
     const ease = (o, to, rate) => { o.k += (to - o.k) * Math.min(1, dt * rate); return o.k; };
     for (const o of this.gates) { const k = ease(o, W.open[o.g.id] ? 1 : 0, 3.2); o.e.setLocalPosition(o.g.x, o.g.y - k * (o.g.h + 0.7) + (k > 0.02 && k < 0.97 ? Math.sin(T * 60) * 0.015 : 0), 0); }
     this.plates.forEach((o, i) => { const on = !!W.plates[i] || !!W.open[o.p.id]; const k = ease(o, W.plates[i] ? 1 : 0, 14); o.e.setLocalPosition(o.p.x, o.p.y - k * 0.1, 0); if (o.lamp.enabled !== on) o.lamp.enabled = o.h.enabled = on; if (on) lit.push({ x: o.p.x, y: o.p.y + 0.5, z: 0.8, r: 3.2, col: AMBER, k: 1.5 }); });
     this.levers.forEach((o, i) => { const on = !!W.levers[i] || !!W.open[o.l.id]; o.a += ((on ? -38 : 38) - o.a) * Math.min(1, dt * 12); o.e.setLocalEulerAngles(0, 0, o.a); if (o.lamp.enabled !== on) o.lamp.enabled = o.h.enabled = on; if (on) lit.push({ x: o.l.x + 0.5, y: o.l.y + 1.1, z: 0.6, r: 3, col: AMBER, k: 1.5 }); });
-    this.traps.forEach((o, i) => { const to = W.traps[i] ? 1 : 0; o.v += ((to - o.k) * 420 - o.v * 26) * dt; o.k = clamp(o.k + o.v * dt, 0, 1.06); const a = o.k * 78; o.a.setLocalEulerAngles(0, 0, a); o.b.setLocalEulerAngles(0, 0, -a); });
+    this.traps.forEach((o, i) => {
+      // a hidden one lies sunk under the grass, and comes up only when someone is all but on it
+      if (o.t.hidden) { const near = W.meX != null && Math.abs(W.meX - o.t.x) < 1.5; o.rv = (o.rv || 0) + ((near || W.traps[i] ? 1 : 0) - (o.rv || 0)) * Math.min(1, dt * (near ? 22 : 2)); o.e.setLocalPosition(o.t.x, o.t.y + 0.02 - (1 - o.rv) * 0.42, 0); }
+      const to = W.traps[i] ? 1 : 0; o.v += ((to - o.k) * 420 - o.v * 26) * dt; o.k = clamp(o.k + o.v * dt, 0, 1.06); const a = o.k * 78; o.a.setLocalEulerAngles(0, 0, a); o.b.setLocalEulerAngles(0, 0, -a); });
     for (const o of this.worms) { const k = wormOut(o.w, T); const on = k > 0.01; if (o.e.enabled !== on) o.e.enabled = on; if (on) { o.e.setLocalScale(1 + (1 - k) * 0.3, o.w.len * k, 1 + (1 - k) * 0.3); o.e.setLocalEulerAngles(0, 0, (o.w.dir < 0 ? 180 : 0) + Math.sin(T * 9 + o.w.x) * 5 * k); } }
     this.cps.forEach((o, i) => { const on = i <= W.cp; if (o.on !== on) { o.on = on; o.lamp.enabled = o.h.enabled = on; } if (on) lit.push({ x: o.c.x - 0.54, y: o.c.y + 1.5, z: -0.9, r: 3.6, col: AMBER, k: 1.0 + Math.sin(T * 7 + i) * 0.08 }); });
     this.bells.forEach((o, i) => { const t = W.bell[i] ?? 9; const sw = t < 3 ? Math.sin(t * 9) * Math.exp(-t * 1.4) * 32 : Math.sin(T * 0.9 + i * 2) * 1.5; o.e.setLocalEulerAngles(0, 0, sw); });

@@ -179,7 +179,9 @@ export function stepPlayer(b, inp, dt, space, links) {
   else if (b.ground) b.reel = Math.max(0, b.reel - 5 * dt);
   if (b.reel <= 0) b.reelTo = null;
   // the ground feels you: walking shakes it, sneaking doesn't, landing does
-  if (b.ground && Math.abs(b.vx) > SNEAK + 0.4) b.noise = 0.6;
+  // (by what you are doing, not your speed: a creeping hop flies at walking pace, and would otherwise
+  // land as footsteps for the few frames it takes to slow, however softly you came down)
+  if (b.ground && !inp.sneak && Math.abs(b.vx) > SNEAK + 0.4) b.noise = 0.6;
   if (b.landed > 0) b.noise = Math.max(b.noise, inp.sneak ? (b.landed > 0.7 ? 0.3 : 0) : 0.5 + b.landed * 0.5); // creeping, you land softly
   if (!wasGround && b.ground && b.landed === 0) b.landed = 0.15;
   // grab a ledge: in the air, against a wall whose top is within reach, pushing toward it (or climbing)
