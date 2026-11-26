@@ -7,6 +7,7 @@ import { Net } from './net.js';
 import { Game } from './game.js';
 import * as portal from './portal.js';
 import * as saves from './save.js';
+import { Voice } from './voice.js';
 import { CHAPTERS } from './chapters/index.js';
 
 const $ = (id) => document.getElementById(id);
@@ -55,6 +56,9 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // together
+  restitch: [`{name} IS DOWN. Reach the body and hold ${K('E')} to stitch them back`, '{name} IS DOWN. Reach the body and hold USE to stitch them back'],
+  down: [`You are down. Twitch (${K('E')}) to show them where you are`, 'You are down. Twitch (USE) to show them where you are'],
   // the Moth Tower
   tower: ['Climb. Something is filling the tower under you', 'Climb. Something is filling the tower under you'],
   mothed: ['MOTHS ARE EATING YOU. Get to a flame', 'MOTHS ARE EATING YOU. Get to a flame'],
@@ -106,6 +110,35 @@ const HINTS = {
   dark1: ['Dark, and cross. Leave the spool lit as bait if you must', 'Dark, and cross. Leave the spool lit as bait if you must'],
   rings1: ['One ring for you, one for your spool', 'One ring for you, one for your spool'],
 };
+// what the twelve buttons tell, one line each: the dolls that lost them
+const BUTTONS = [
+  '',
+  'It held the lever while the others ran. They did not come back for it.',
+  'It went into the water first, to see how deep. It was deep.',
+  'It said it could hear the Spindle. It walked toward the sound.',
+  'It carried the lamp. It did not see the one behind it go.',
+  'It washed and washed. The rot was already in the thread.',
+  'It hid in a sack for a whole night. In the morning it was the only one left.',
+  'It let the grub in, to open the door. It never came off the stage.',
+  'It held fast through every turn. It is holding still.',
+  'It rang the bell to turn the giant away. The Choir came down instead.',
+  'It counted the marks on the walls. Then it stopped counting.',
+  'The Weaver made it last, and best. The Collector took it first.',
+  'It reached the crack of daylight, and came back down to tell the others.',
+];
+const ACH = {
+  last: ['AT THE LAST STITCH', 'stitched a friend back with under a second to spare'],
+  stitch: ['NEEDLE AND THREAD', 'stitched a friend back'],
+  drinkers: ['CANDLE-MOTH', 'led five Drinkers into the flame'],
+  glutton: ['LAST SUPPER', 'fed the Glutton the poisoned sack'],
+  turns: ['HOLD FAST', 'held on through five turns of the drum'],
+  buttons: ['ALL ITS EYES', 'found all twelve lost buttons'],
+  wind: ['THE TURNING', 'wound the Spindle'],
+  cut: ['OUTSIDE', 'cut the thread and climbed out'],
+  unpick: ['THE WHOLE CLOTH', 'let the Weaver unpick itself'],
+  unbroken: ['UNBROKEN', 'reached the end without a fall'],
+  nocut: ['NEVER CUT', 'reached the end without the thread being cut'],
+};
 const USES = { HOLD: 'hold the lever', HANG: 'hang the spool on the hook', SET: 'set the spool down here', CALL: 'call the spool back', LAMP: 'pick up the lamp', MEAT: 'knock the meat down', DROP: 'set the lamp down', TOSS: 'toss the lamp ahead' };
 
 async function boot() {
@@ -140,11 +173,11 @@ async function boot() {
   let trialReady = false; // (the trial's state is declared further down; setState may run before it)
   let state = 'menu', touchUI = isTouch(), hintKey = null, hintVars = {}, useLabel = null, cardTimer = 0, toastTimer = 0, flashTimer = 0, lastBeat = '';
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
-  const tagEls = new Map();
+  const tagEls = new Map(), markEls = new Map();
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed' || hintKey === 'holdfast' || hintKey === 'mothed');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed' || hintKey === 'holdfast' || hintKey === 'mothed' || hintKey === 'restitch');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;
@@ -180,6 +213,21 @@ async function boot() {
     end(s) { showEnd(s); },
     /** how much of you is left to the rot (1 .. 0), a sick ring over the head */
     rot(k, at) { const el = $('rotring'); if (k == null || !at) { el.hidden = true; return; } el.hidden = false; el.style.left = `${at[0]}px`; el.style.top = `${at[1] - 30}px`; el.style.setProperty('--b', k.toFixed(3)); },
+    /** a caption for a sound (when captions are on) */
+    caption(text) { if (!capOn) return; const box = $('captions'), el = document.createElement('div'); el.textContent = text; box.appendChild(el); setTimeout(() => el.classList.add('out'), 2600); setTimeout(() => el.remove(), 3400); while (box.children.length > 3) box.firstChild.remove(); },
+    /** an achievement, kept for good */
+    achieve(id) { const got = JSON.parse(store.get('tb.ach', '[]')); if (got.includes(id) || !ACH[id]) return; got.push(id); store.set('tb.ach', JSON.stringify(got)); setTimeout(() => hud.toast(`✦ ${ACH[id][0]}: ${ACH[id][1]}`), 900); sfx.play('chime', { vol: 0.8 }); },
+    streamer: store.get('tb.stream', '') === '1',
+    /** a lost button found: its line, and how many */
+    button(k, count) { hud.toast(`A lost button (${count} of 12). ${BUTTONS[k] || ''}`); },
+    /** pings and emotes over the world: [{ id, text, x, y, a, slot }] */
+    marks(list) {
+      const box = $('marks'), seen = new Set();
+      for (const m of list) { seen.add(m.id); let el = markEls.get(m.id); if (!el) { el = document.createElement('b'); el.className = `mk s${m.slot}`; el.textContent = m.text; box.appendChild(el); markEls.set(m.id, el); } el.style.left = `${m.x}px`; el.style.top = `${m.y}px`; el.style.opacity = m.a; }
+      for (const [id, el] of markEls) if (!seen.has(id)) { el.remove(); markEls.delete(id); }
+    },
+    /** the thread going cold: how much is left (1 .. 0), or null */
+    cold(k) { const el = $('cold'); if (k == null) { el.hidden = true; return; } el.hidden = false; el.style.setProperty('--k', k.toFixed(3)); },
     /** the breath left (0..1) in a ring over the doll's head; null hides it */
     breath(k, at) { const el = $('breath'); if (k == null || !at) { el.hidden = true; return; } el.hidden = false; el.style.left = `${at[0]}px`; el.style.top = `${at[1]}px`; el.style.setProperty('--b', k.toFixed(3)); el.classList.toggle('low', k < 0.3); },
     /** the card between chapters: the last one's lines, then the next one's name; then() starts it */
@@ -203,7 +251,7 @@ async function boot() {
     show('menu', s === 'menu'); show('lobby', s === 'lobby'); show('end', s === 'end'); show('hud', s === 'play');
     show('touch', s === 'play' && touchUI);
     document.body.classList.toggle('touching', touchUI);
-    show('roomChip', s === 'play' && net.online);
+    show('roomChip', s === 'play' && net.online && !hud.streamer);
     if (net.online) $('roomChip').textContent = net.code;
     input.enabled = s === 'play';
     sfx.music(s === 'play' || s === 'end' ? 'play' : 'menu');
@@ -229,8 +277,10 @@ async function boot() {
     sfx.init(); sfx.play('select');
     if (fresh && !from) { const slot = saves.freeSlot(); saves.erase(slot); saves.setCurrent(slot); }
     const ci = from ? from.ci ?? 0 : 0;
+    game.thread = from?.thread ?? saves.read(saves.current())?.thread ?? 1;
     if (from || fresh || !game.running || !game.attract || game.n !== 1 || game.ci !== 0) game.start({ order: soloOrder(), meId: 'me', runT0: 0, chapter: ci, cp: from?.lantern ?? 0, deaths: from?.deaths ?? 0, cut: from?.cuts ?? 0, found: from?.found ?? [] }); else game.begin();
     game.timeBefore = from?.time ?? 0;
+    if (game.thread > 1 && (from?.ci ?? 0) === 0) hud.toast('The Second Thread. Some things have changed.');
     game.Tlocal = game.Tlocal || 0;
     if (fresh || from || game.runT0 == null) game.runT0 = game.T();
     setState('play');
@@ -247,7 +297,7 @@ async function boot() {
       const sm = document.createElement('small'); sm.textContent = s ? saves.stats(s) : '';
       w.append(b, sm); li.appendChild(w);
       const go = document.createElement('button'); go.className = 'btn small'; go.textContent = s ? (s.done ? 'AGAIN' : 'GO ON') : 'BEGIN';
-      go.addEventListener('click', () => { saves.setCurrent(i); show('journeys', false); if (s && !s.done) playSolo(false, s); else { saves.erase(i); saves.setCurrent(i); firstStory(() => playSolo(false, { ci: 0 })); } });
+      go.addEventListener('click', () => { saves.setCurrent(i); show('journeys', false); if (s && !s.done) playSolo(false, s); else { const thread = s && s.done ? (s.thread || 1) + 1 : 1; saves.erase(i); saves.setCurrent(i); saves.write(i, { ci: 0, thread }); firstStory(() => playSolo(false, { ci: 0, thread })); } });
       li.appendChild(go);
       if (s) { const x = document.createElement('button'); x.className = 'btn small ghost'; x.textContent = 'FORGET'; x.addEventListener('click', () => { if (x.dataset.sure) { saves.erase(i); renderJourneys(); refreshMenu(); } else { x.dataset.sure = '1'; x.textContent = 'SURE?'; } }); li.appendChild(x); }
       ol.appendChild(li);
@@ -325,6 +375,8 @@ async function boot() {
   // ---- i: the story, the goal, how to play, what hunts you
   let infoPaused = false;
   function openInfo() {
+    const sv = saves.read(saves.current()), ach = JSON.parse(store.get('tb.ach', '[]'));
+    $('iJourney').textContent = `${sv ? `${saves.describe(sv)}  ·  ${saves.stats(sv)}` : 'not yet begun'}  ·  achievements ${ach.length} / ${Object.keys(ACH).length}${ach.length ? `: ${ach.map((a) => ACH[a]?.[0]).filter(Boolean).join(', ')}` : ''}`;
     $('iKeys').innerHTML = touchUI ? '<b>STICK</b><span>walk, swing on the thread; up and down to climb it; down creeps</span><b>JUMP</b><span>jump, let go of the thread; hammer it to tear out a worm</span><b>HOLD</b><span>brace: hold the thread fast</span><b>USE</b><span>levers; your spool; rip a worm out of a friend</span>'
       : '<b>A D / ← →</b><span>walk, swing on the thread</span><b>SPACE</b><span>jump, let go of the thread; hammer it to tear out a worm</span><b>W S / ↑ ↓</b><span>climb the thread; S creeps on the ground</span><b>SHIFT</b><span>brace: hold the thread fast</span><b>E</b><span>levers; your spool; rip a worm out of a friend</span><b>I</b><span>this page</span><b>ESC</b><span>pause</span>';
     show('info', true);
@@ -360,6 +412,40 @@ async function boot() {
   $('sSfx').addEventListener('input', (e) => sfx.setVolume('sfx', e.target.value / 100));
   $('sMusic').addEventListener('input', (e) => sfx.setVolume('music', e.target.value / 100));
   $('sBright').addEventListener('input', (e) => { hud.expo = e.target.value / 100; store.set('tb.bright', e.target.value); });
+  let capOn = store.get('tb.cap', '') === '1';
+  const capUI = () => { $('sCap').textContent = capOn ? 'ON' : 'OFF'; };
+  capUI();
+  $('sCap').addEventListener('click', () => { sfx.play('click'); capOn = !capOn; store.set('tb.cap', capOn ? '1' : ''); capUI(); });
+  const streamUI = () => { $('sStream').textContent = hud.streamer ? 'ON' : 'OFF'; document.body.classList.toggle('streamer', hud.streamer); };
+  streamUI();
+  $('sStream').addEventListener('click', () => { sfx.play('click'); hud.streamer = !hud.streamer; store.set('tb.stream', hud.streamer ? '1' : ''); streamUI(); });
+  // voice, near and far along the thread (off unless switched on)
+  const voice = new Voice(net);
+  window.__tb.voice = voice;
+  const voiceUI = () => { $('sVoice').textContent = voice.on ? 'ON' : 'OFF'; };
+  $('sVoice').addEventListener('click', async () => { sfx.play('click'); const ok = await voice.enable(!voice.on); if (!ok) $('sVoiceS').textContent = 'the microphone was not allowed'; voiceUI(); });
+  setInterval(() => voice.update(game), 100);
+  // phones: a shudder in the hand for the big moments
+  game.fx.onShake = (k) => { if (touchUI && navigator.vibrate) try { navigator.vibrate(Math.round(18 + k * 70)); } catch { /* */ } };
+  // clips: the last twenty seconds of play, saved as a video (C)
+  const clips = { recs: [], ok: typeof MediaRecorder !== 'undefined' && !!$('app').captureStream && level >= 2 && !navigator.webdriver }; // (on stronger machines only: it costs)
+  function startRec(i) {
+    try {
+      const stream = clips.stream || (clips.stream = $('app').captureStream(30));
+      const type = ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t));
+      const r = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 2500000 }), chunks = [];
+      r.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
+      r.onstop = () => { const rec = clips.recs[i]; if (rec && rec.save) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(chunks, { type: 'video/webm' })); a.download = `thread-bearers-${Date.now()}.webm`; a.click(); hud.toast('The last moments, saved as a clip.'); } if (state === 'play') clips.recs[i] = startRec(i); };
+      r.start(1000);
+      return { r, t0: Date.now(), save: false };
+    } catch { clips.ok = false; return null; }
+  }
+  function clipTick() {
+    if (!clips.ok) return;
+    for (let i = 0; i < 2; i++) { const rec = clips.recs[i]; if (state === 'play' && !rec && (i === 0 || (clips.recs[0] && Date.now() - clips.recs[0].t0 > 10000))) clips.recs[i] = startRec(i); else if (rec && Date.now() - rec.t0 > 21000 && !rec.save) { rec.r.stop(); clips.recs[i] = null; } }
+  }
+  addEventListener('keydown', (e) => { if (e.code !== 'KeyC' || state !== 'play' || !clips.ok) return; const recs = clips.recs.filter(Boolean).sort((a, b) => a.t0 - b.t0); const r = recs[0]; if (!r) return; r.save = true; r.r.stop(); });
+  setInterval(clipTick, 1000);
   const goreUI = () => { const full = game.goreMode !== 'stitched'; $('sGore').textContent = full ? 'FULL' : 'STITCHED'; $('sGoreS').textContent = full ? 'red dye, torn limbs' : 'grey stuffing, nothing torn off'; };
   goreUI();
   $('sGore').addEventListener('click', () => { sfx.play('click'); game.goreMode = game.goreMode === 'stitched' ? 'full' : 'stitched'; store.set('tb.gore', game.goreMode); game.gore.setting = game.goreMode; goreUI(); });
@@ -380,7 +466,10 @@ async function boot() {
     $('eSmall').textContent = E[0];
     $('eTitle').textContent = whole ? (s.n === 1 ? 'THE WHOLE DOLL' : 'UNBROKEN') : s.cut > 0 ? 'THE SEVERED CORD' : 'MENDED';
     $('eLine').textContent = `${s.split ? 'You could not agree, and the thread snapped; the most of you had their way. ' : ''}${E[1]}`;
-    $('eStats').textContent = `${mm}:${String(ss).padStart(2, '0')}  ·  ${s.deaths === 0 ? 'no falls' : s.deaths === 1 ? '1 fall' : `${s.deaths} falls`}  ·  ${s.n === 1 ? 'alone' : `${s.n} together`}`;
+    $('eStats').textContent = `${mm}:${String(ss).padStart(2, '0')}  ·  ${s.deaths === 0 ? 'no falls' : s.deaths === 1 ? '1 fall' : `${s.deaths} falls`}  ·  ${s.n === 1 ? 'alone' : `${s.n} together`}${s.stitches ? `  ·  ${s.stitches} stitched back` : ''}${s.found ? `  ·  ${s.found} found` : ''}`;
+    const WORDS = { trap: 'jaws', shears: 'the shears', crawler: 'the needle', fell: 'falls', water: 'water', taken: 'worms', possessed: 'a friend', caged: 'the Collector', choir: 'the Choir', drained: 'Drinkers', stripped: 'rats', rot: 'rot', fumes: 'fumes', dyed: 'the vats', press: 'presses', swallowed: 'the Glutton', moths: 'moths', turn: 'the drum', shock: 'eels', cold: 'the cold', cut: 'the cut thread' };
+    const top = Object.entries(s.causes || {}).filter(([k]) => k !== 'retry').sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => `${WORDS[k] || k} ${v}`).join('  ·  ');
+    $('eCauses').textContent = top ? `taken by: ${top}` : '';
     const guest = net.online && !net.isHost;
     show('eAgain', !guest);
     $('eAgain').textContent = net.online ? 'BACK TO THE THREAD' : 'AGAIN';

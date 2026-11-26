@@ -6,7 +6,7 @@ export default {
   id: 'theatre', num: 11, act: 4, name: 'THE MARIONETTE THEATRE',
   card: ['It held the house up by its strings.', 'It let go.'],
   build(k) {
-    const { L, n, solo, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
+    const { button, other, L, n, solo, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
     const y = 0;
     const trap = (x0, x1) => { L.solids.push({ x0, y0: y - 30, x1, y1: y - 6, ground: true }); L.kill.push({ x0, x1, y0: y - 30, y1: y - 3, why: 'fell' }); deco('spikes', x0, y - 6, { w: x1 - x0 }); return [x0, x1]; };
     const pup = (x, o) => L.monsters.push({ kind: 'puppeteer', id: `p${L.monsters.length}`, x, y: y + 5.9, floor: y, gate: 'strings', ...o });
@@ -23,6 +23,8 @@ export default {
     L.candles.push({ x: 7, y }, { x: 37, y });
     hint(3, 10, 'eye');
     deadDoll(24, y, { strings: true });
+    button(7, 33.4, y); // where the light lingers
+    other([{ x: 58, y }, { x: 70, y }]);
     cp(39.5, y, 'THE PUPPET DOOR');
     // 2. the puppet door: only a puppet opens it. Stand in the spotlight; walk onto the plate swapped
     pup(46, { fixed: 45.2, x0: 45.2, x1: 45.2, w: 0.8 });

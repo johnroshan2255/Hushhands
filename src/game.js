@@ -9,13 +9,14 @@ import { Scene, mats, ent, halo, AMBER, sharedMesh, ink, stickMesh, setStick } f
 import { addLathe } from './meshes.js';
 import { glowMaterial } from './render.js';
 import { Threads, SpoolView } from './rope.js';
-import { Rig } from './chars.js';
 import { newMonster, thinkMonster, packMonster, unpackMonster, viewFor } from './monsters.js';
 import { unlatch, DRAIN } from './creatures/drinker.js';
 import { RatsView, litAt } from './creatures/rats.js';
 import { GRUB } from './creatures/puppeteer.js';
 import { roomAt, roomState, flip, spin, frameSpace, TURN, WARN } from './rooms.js';
 import { MotherView } from './creatures/moths.js';
+import { OtherDoll } from './creatures/other.js';
+import { Rig } from './chars.js';
 import { FX } from './fx.js';
 import { Gore } from './gore.js';
 
@@ -28,6 +29,7 @@ let redMat = null;
 const redGlow = () => { if (!redMat) { redMat = glowMaterial(2.4); redMat.setParameter('uTint', new Float32Array([1, 0.16, 0.12, 1])); } return redMat; };
 // the worm that gets into a head: how long it gives you, alone and with others
 const TAKES_ALONE = 5.5, TAKES_TOGETHER = 10;
+const RESTITCH = 6; // seconds a friend has to reach a body and stitch it back
 // rot: how long until it takes a doll apart, how fast it creeps along the thread (m/s)
 export const ROT = 20, ROT_SPEED = 1.0;
 const R01 = Math.random;
@@ -99,6 +101,12 @@ export class Game {
     for (const l of L.lamps) { l.by = -1; l.x = l.x0 ?? l.x; l.y = l.y0 ?? l.y; l.x0 = l.x; l.y0 = l.y; }
     this.rats = L.swarms.length || L.waters.some((w) => w.look === 'rats') ? new RatsView(app, L, this.low ? 0 : 2) : null;
     this.mothers = L.waters.filter((w) => w.look === 'mother').map((w) => new MotherView(app, w));
+    this.others = attract || this.thread > 1 ? [] : L.others.map((o) => new OtherDoll(app, o, order[this.meIdx]?.slot ?? 0));
+    // (at the Collector's: the Other Dolls in its cages, in your shapes, their threads cut)
+    this.caged = !attract && L.caged ? order.map((o, i) => { const r = new Rig(app, { variant: o.slot }); r.root.setLocalScale(SCALE, SCALE, SCALE); return { r, x: L.caged.x + i * 1.6, y: L.caged.y + (i % 2) * 0.3 }; }) : [];
+    // the cold open: before you can move, one who woke before you runs past, and is taken
+    this.coldT = !attract && L.coldOpen && cp === 0 && !this.skipCold ? 0 : null;
+    if (this.coldT != null) this.buildColdOpen();
     this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {}, rot: {}, grub: {}, endT: 0, splitT: 0 };
     this.mon = L.monsters.map(newMonster);
     this.monViews = L.monsters.map((m) => viewFor(app, m));
@@ -124,7 +132,7 @@ export class Game {
   saveNow() {
     if (this.attract || !this.W || !this.onSave) return;
     const W = this.W;
-    this.onSave({ chapter: this.L.id, ci: this.ci, lantern: W.cp, deaths: W.deaths, cuts: W.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: W.found });
+    this.onSave({ thread: this.thread || 1, chapter: this.L.id, ci: this.ci, lantern: W.cp, deaths: W.deaths, cuts: W.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: W.found });
   }
   stop() {
     if (!this.running && !this.scene) return;
@@ -140,6 +148,9 @@ export class Game {
     this.spoolView?.destroy(); this.spoolView = null;
     this.rats?.destroy(); this.rats = null;
     for (const m of this.mothers || []) m.destroy(); this.mothers = [];
+    for (const o of this.others || []) o.destroy(); this.others = [];
+    for (const c of this.caged || []) c.r.destroy(); this.caged = [];
+    if (this.cold) { this.cold.rig.destroy(); this.cold.hand.destroy(); this.cold = null; }
     for (const s of this.strings || []) s?.destroy(); this.strings = [];
     for (const v of this.monViews || []) v.destroy();
     this.monViews = [];
@@ -239,6 +250,19 @@ export class Game {
       } else if (l.by < 0 && !L.lamps.some((q) => q.by === from) && Math.abs(p.b.x - l.x) < 1.4 && Math.abs(p.b.y - l.y) < 1.4) l.by = from;
       else return;
       this.emit({ t: 'lamp', k: i.k, by: l.by, x: l.x, y: l.y, toss: !!i.toss });
+    } else if (i.t === 'stitch') { // a friend at the body, holding USE: stitched back
+      const d = W.down, p = this.players[from];
+      if (!d || d.who !== i.k || !p || p.b.dead || Math.abs(p.b.x - d.x) > 1.6 || Math.abs(p.b.y - d.y) > 1.6) return;
+      W.down = null;
+      W.stitches = (W.stitches || 0) + 1;
+      this.emit({ t: 'stitched', who: i.k, by: from, x: d.x, y: d.y, late: d.until - T < 1 });
+    } else if (i.t === 'ping') { // a ping or an emote: everyone sees it
+      this.emit({ t: 'ping', who: from, k: i.k | 0, x: i.x, y: i.y });
+    } else if (i.t === 'button') { // a lost button, found
+      const id = `b${i.k}`;
+      if (W.found.includes(id) || !L.buttons.some((q) => q.k === i.k)) return;
+      W.found.push(id);
+      this.emit({ t: 'found', id, k: i.k, by: from });
     } else if (i.t === 'burn') { // a grub held to a candle flame
       if (!H.grub[from]) return;
       delete H.grub[from];
@@ -272,6 +296,19 @@ export class Game {
   kill(who, why, x, y, k) {
     const W = this.W;
     if (W.phase !== 'play') return;
+    // together, one death is not yet the end: the thread goes cold over a few seconds, and a friend who
+    // reaches the body in time stitches it back. (Not for deaths that leave nothing to reach.)
+    const others = this.players.filter((p, i) => i !== who && !p.b.dead);
+    if (this.n > 1 && who >= 0 && !W.down && others.length && !['cut', 'choir', 'retry', 'cold', 'caged', 'fell', 'swallowed', 'stripped', 'turn'].includes(why)) {
+      W.deaths++;
+      (W.causes ||= {})[why] = (W.causes[why] || 0) + 1;
+      W.down = { who, until: this.T() + RESTITCH, x, y };
+      this.host.wormed = {};
+      this.emit({ t: 'down', who, why, x, y, k, d: W.deaths, until: W.down.until });
+      return;
+    }
+    W.down = null;
+    (W.causes ||= {})[why] = (W.causes[why] || 0) + 1;
     W.deaths++;
     if (why === 'cut') W.cut++;
     this.host.wormed = {}; this.host.latched = {}; this.host.rot = {}; this.host.grub = {};
@@ -322,6 +359,8 @@ export class Game {
     }
     // a drum set turning by its lever: once
     for (const r of L.rooms) if (r.lever && W.open[r.lever] && W.turnAt[r.id] == null) { W.turnAt[r.id] = T + WARN; this.emit({ t: 'turnAt', id: r.id, t0: W.turnAt[r.id] }); }
+    // someone down: if nobody stitches them back in time, the thread goes cold for everyone
+    if (W.down && T > W.down.until) { const d = W.down; W.down = null; this.kill(-1, 'cold', d.x, d.y); return; }
     // grubs fall off in time; the Puppeteer falls when its strings are cut
     for (const [k, until] of Object.entries(H.grub)) if (until <= T) { delete H.grub[k]; this.emit({ t: 'grub', who: +k, on: false }); }
     this.mon.forEach((m, mi) => { if (m.kind === 'puppeteer' && m.mode === 'watch' && L.monsters[mi].gate && W.open[L.monsters[mi].gate]) { m.mode = 'fallen'; this.emit({ t: 'pfall', mi }); } });
@@ -402,26 +441,27 @@ export class Game {
       case 'lever': W.levers[e.k] = e.on; sfx.play('lever', { x: L.levers[e.k].x }); break;
       case 'gate': { W.open[e.id] = true; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.burst('dust', g.x + 0.35, g.y + 0.2, 0.5, 10, { spread: 1.2 }); fx.shake(0.35); } break; }
       case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
-      case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
+      case 'flood': this.cap('[water, rushing in]'); W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
       case 'turnAt': W.turnAt[e.id] = e.t0; break;
       case 'moths': { const p = this.players[e.who]; if (!p) break; p.mothed = e.mi; sfx.play('flutter', { x: p.b.x, vol: 1.5 }); if (p.me) { this.hud.flash('#d8dccb', 0.25, 120); fx.shake(0.2); } break; }
       case 'mburn': { const p = this.players[e.who]; if (p) p.mothed = null; sfx.play('flame', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 20, { power: 1.2 }); fx.burst('dust', e.x, e.y, 0.3, 8, { spread: 1 }); break; }
       case 'grub': { const p = this.players[e.who]; if (!p) break; p.grub = e.on; if (e.on) { sfx.play('squirm', { x: p.b.x, vol: 1.2 }); sfx.play('clack', { x: p.b.x }); fx.burst('ink', p.b.x, p.b.y + 1.1, 0.3, 6, { power: 0.5 }); if (p.me) { this.hud.flash('#2b2b20', 0.45, 160); fx.shake(0.3); } } else { sfx.play(e.how === 'burn' ? 'flame' : 'squirm', { x: p.b.x }); fx.burst(e.how === 'burn' ? 'ember' : 'ink', p.b.x, p.b.y + 1.1, 0.3, 12, { power: 0.8 }); } break; }
       case 'pfall': { const m = this.mon[e.mi]; if (m) m.mode = 'fallen'; sfx.play('snip', { x: m?.x }); sfx.play('crash', { x: m?.x }); sfx.play('groan', { x: m?.x, vol: 1.5 }); fx.shake(1); this.swing = 1; for (const p of this.players) p.grub = false; break; }
       case 'meat': { W.meat[e.k] = e.state; const q = L.meat[e.k]; if (e.state === 1) { sfx.play('land', { x: q.x, vol: 1 }); sfx.play('squelch', { x: q.x }); fx.shake(0.2); } else { sfx.play('chomp', { x: q.x }); fx.burst(q.poison ? 'spore' : 'dye', q.x, q.y + 0.4, 0.3, 14, { power: 1 }); } break; }
-      case 'grise': { sfx.play('creak', { x: e.x, vol: 1.4 }); sfx.play('groan', { x: e.x, vol: 0.8 }); fx.burst('dust', e.x, this.mon[e.mi].y, 0.4, 10, { spread: 1.2, power: 0.7 }); if (Math.abs(e.x - this.cam.x) < 12) fx.shake(0.35); break; }
+      case 'grise': { this.cap('[the boards creak and bulge]', e.x); sfx.play('creak', { x: e.x, vol: 1.4 }); sfx.play('groan', { x: e.x, vol: 0.8 }); fx.burst('dust', e.x, this.mon[e.mi].y, 0.4, 10, { spread: 1.2, power: 0.7 }); if (Math.abs(e.x - this.cam.x) < 12) fx.shake(0.35); break; }
       case 'gbite': { sfx.play('chomp', { x: e.x }); fx.shake(0.7); fx.burst('dust', e.x, this.mon[e.mi].y + 0.2, 0.4, 16, { spread: 1.5, power: 1.2 }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.4, 0.4, 8, { power: 1 }); break; }
-      case 'gdead': sfx.play('roar', { x: e.x, vol: 0.8 }); sfx.play('crash', { x: e.x }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.5, 0.3, 40, { power: 1.6, dir: [0, 1.2, 0] }); fx.shake(0.9); break;
+      case 'gdead': this.hud.achieve?.('glutton'); sfx.play('roar', { x: e.x, vol: 0.8 }); sfx.play('crash', { x: e.x }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.5, 0.3, 40, { power: 1.6, dir: [0, 1.2, 0] }); fx.shake(0.9); break;
       case 'bloom': { W.blooms[e.k] = true; const bl = L.blooms[e.k]; sfx.play('burst', { x: bl.x, vol: 0.6 }); sfx.play('flutter', { x: bl.x }); fx.burst('spore', bl.x, bl.y + 0.3, 0.3, 30, { power: 1.2, dir: [0, 0.6, 0] }); break; }
       case 'rot': { const p = this.players[e.who]; if (!p) break; p.rot = e.on ? e.t0 : null; if (e.on) { sfx.play('squelch', { x: p.b.x }); if (p.me) this.hud.flash('#4d5a3a', 0.35, 200); if (e.from != null && p.me) this.hud.toast(`The rot came down the thread from ${this.players[e.from].name}.`); } else { sfx.play('splash', { x: p.b.x }); fx.burst('drop', p.b.x, p.b.y + 0.8, 0.4, 10); } break; }
-      case 'swarm': W.swarm[e.k] = true; sfx.play('squeal', { x: L.swarms[e.k].x0, vol: 1.6 }); sfx.play('squeal', { x: L.swarms[e.k].x1, vol: 1.4 }); fx.shake(0.25); break;
+      case 'swarm': this.cap('[squealing, everywhere]', L.swarms[e.k].x0); W.swarm[e.k] = true; sfx.play('squeal', { x: L.swarms[e.k].x0, vol: 1.6 }); sfx.play('squeal', { x: L.swarms[e.k].x1, vol: 1.4 }); fx.shake(0.25); break;
       case 'lamp': { const l = L.lamps[e.k]; if (!l) break; l.by = e.by; if (e.by < 0) { l.x = e.x; l.y = e.y; } sfx.play(e.by >= 0 ? 'hook' : e.toss ? 'cloth' : 'plate', { x: e.x }); if (e.toss) fx.burst('ember', e.x, e.y + 0.5, 0.3, 8); break; }
       case 'shut': { W.open[e.id] = false; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.shake(0.5); } break; }
       case 'crack': W.slabs[e.k] = 1; sfx.play('crackle', { x: L.slabs[e.k].x0 + 1.3 }); break;
       case 'shatter': { W.slabs[e.k] = 2; const s = L.slabs[e.k]; sfx.play('glass', { x: s.x0 + 1.3 }); for (let x = s.x0 + 0.3; x < s.x1; x += 0.6) fx.burst('glass', x, s.y - 0.1, 0, 5, { spread: 0.7 }); break; }
-      case 'bell': { this.bellAt[e.k] = this.T(); const b = L.bells[e.k]; sfx.play(b.kind === 'hang' ? 'bell' : 'tinybell', { x: b.x }); W.wake = Math.max(W.wake, 0.6); break; }
+      case 'bell': { this.cap('[a bell rings]', L.bells[e.k].x); this.bellAt[e.k] = this.T(); const b = L.bells[e.k]; sfx.play(b.kind === 'hang' ? 'bell' : 'tinybell', { x: b.x }); W.wake = Math.max(W.wake, 0.6); break; }
       case 'stab': { const m = this.mon[e.mi]; sfx.play('stab', { x: e.x }); fx.shake(0.4); fx.burst('dust', e.x, m.y - 4.1, 0.3, 8, { spread: 1 }); const b = this.me?.b; if (b && !b.dead && !this.dying && W.phase === 'play' && Math.abs(b.x - e.x) < 0.8 && b.y < m.y - 1 && b.y > m.y - 5.2) this.die('crawler'); break; }
       case 'hear': { // it heard you: the scare
+        { const m = this.mon[e.mi]; this.cap(m.kind === 'crawler' ? '[skittering, above]' : m.kind === 'collector' ? '[a great groan]' : m.kind === 'drinker' ? '[a hum, rising]' : m.kind === 'glutton' ? '[the boards shift]' : '[something hears you]', m.x); }
         const m = this.mon[e.mi];
         sfx.play(m.kind === 'crawler' ? 'skitter' : 'groan', { x: m.x });
         if (!this.attract && Math.abs(m.x - this.cam.x) < 20) {
@@ -445,12 +485,16 @@ export class Game {
       }
       case 'latch': { const p = this.players[e.who]; if (!p) break; p.latched = e.mi; sfx.play('slurp', { x: p.b.x }); fx.burst('dye', p.b.x, p.b.y + 0.9, 0.3, 6, { power: 0.6 }); if (p.me) { this.latchT = 0.001; this.shakeOut = 0; fx.shake(0.6); this.hud.flash('#5a0000', 0.5, 160); } break; }
       case 'unlatch': { const p = this.players[e.who]; if (!p) break; p.latched = null; sfx.play('rip', { x: p.b.x }); if (p.me) { this.latchT = 0; this.shakeOut = 0; this.wormSafe = 1.2; } if (e.by >= 0) { const by = this.players[e.by]; this.hud.toast(`${by ? by.name : 'Someone'} tore the Drinker off ${p.name}.`); } break; }
-      case 'burn': sfx.play('burst', { x: e.x }); sfx.play('flame', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 24, { power: 1.4 }); fx.burst('ink', e.x, e.y, 0.3, 14, { power: 1.2 }); if (this.mon[e.mi]?.full > 0.2) fx.burst('dye', e.x, e.y, 0.3, 12); fx.shake(0.35); break;
+      case 'burn': this.burned = (this.burned || 0) + 1; if (this.burned >= 5) this.hud.achieve?.('drinkers'); sfx.play('burst', { x: e.x }); sfx.play('flame', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 24, { power: 1.4 }); fx.burst('ink', e.x, e.y, 0.3, 14, { power: 1.2 }); if (this.mon[e.mi]?.full > 0.2) fx.burst('dye', e.x, e.y, 0.3, 12); fx.shake(0.35); break;
       case 'ash': fx.burst('dust', e.x, e.y, 0.3, 8, { spread: 1 }); break;
       case 'lunge': { const p = this.players[e.who]; if (p) { p.lungeT = 0.01; sfx.play('lunge', { x: p.b.x }); } break; }
       case 'trip': sfx.play('groan', { x: e.x }); sfx.play('twang', { x: e.x, vol: 2 }); break;
       case 'crash': W.tripped = true; { const g = L.monsters[e.mi]?.gate; if (g) W.open[g] = true; } sfx.play('crash', { x: e.x }); fx.shake(1); for (let i = 0; i < 6; i++) fx.burst('dust', e.x - 3 + i * 1.2, this.mon[e.mi].y + 0.3, 0.6, 6, { spread: 1.4 }); break;
       case 'die': this.onDie(e); break;
+      case 'down': this.onDown(e); break;
+      case 'stitched': this.onStitched(e); break;
+      case 'ping': this.onPing(e); break;
+      case 'found': { if (!W.found.includes(e.id)) W.found.push(e.id); if (W.found.filter((f) => f[0] === 'b').length >= 12) this.hud.achieve?.('buttons'); const bt = L.buttons.find((q) => q.k === e.k); sfx.play('chime', { x: bt?.x }); fx.burst('ember', bt?.x ?? 0, (bt?.y ?? 0) + 0.4, 0.4, 16, { power: 0.8 }); this.hud.button?.(e.k, W.found.filter((f) => f[0] === 'b').length); this.saveNow(); break; }
       case 'respawn': this.onRespawn(e); break;
       case 'win': W.phase = 'won'; this.wonT = 0; this.result = e; sfx.play('win'); break;
       case 'chapter': this.onChapter(e); break;
@@ -473,6 +517,87 @@ export class Game {
     const was = this.L.card || CHAPTERS[this.ci].card;
     this.hud.between({ num: C.num, name: C.name, lines: was }, () => { if (this.running && this.leaving) { this.leaving = false; this.start(keep); } });
   }
+  /** one of us is down: their body lies there, the thread going cold */
+  onDown(e) {
+    const W = this.W, p = this.players[e.who];
+    if (!p || W.phase !== 'play') return;
+    W.deaths = e.d; W.down = { who: e.who, until: e.until, x: e.x, y: e.y };
+    const b = p.b;
+    b.dead = true; b.braced = false; b.hang = false; b.mantle = null;
+    this.sfx.play('die', { x: b.x }); this.sfx.play('sting', { x: b.x, vol: 0.6 });
+    this.bodyFor(p, e.why, b.x, b.y);
+    p.downBody = this.gore.bodies[this.gore.bodies.length - 1];
+    p.wormed = false; p.latched = null; p.grub = false; p.mothed = null;
+    if (p.me) { this.dying = true; this.hud.flash('#4a0000', 0.55, 180); this.wormT = 0; this.latchT = 0; }
+    this.hud.toast(p.me ? 'You are down. They have six seconds to reach you.' : `${p.name} is down. Reach the body and hold USE.`);
+  }
+  onStitched(e) {
+    const W = this.W, p = this.players[e.who];
+    W.down = null;
+    if (!p) return;
+    const b = p.b;
+    b.dead = false; b.x = e.x; b.y = e.y + 0.05; b.vx = b.vy = 0; p.hid = false; p.rig.setVisible(true);
+    if (p.downBody) { p.downBody.e.destroy(); this.gore.bodies.splice(this.gore.bodies.indexOf(p.downBody), 1); p.downBody = null; }
+    this.sfx.play('stitch', { x: e.x }); this.fx.burst('ember', e.x, e.y + 0.6, 0.3, 14, { power: 0.8 });
+    if (p.me) { this.dying = false; this.hud.flash('#ffb060', 0.3, 120); }
+    const by = this.players[e.by];
+    this.hud.toast(`${by ? by.name : 'Someone'} stitched ${p.name} back${e.late ? ', at the last moment' : ''}.`);
+    if (e.late && by && by.me) this.hud.achieve?.('last');
+    if (by && by.me) this.hud.achieve?.('stitch');
+  }
+  /** a ping (1), a wave (2), pointing on (3), panic (4); the dead can still twitch */
+  onPing(e) {
+    const p = this.players[e.who];
+    if (!p) return;
+    const x = e.x ?? p.b.x, y = e.y ?? p.b.y;
+    this.sfx.play(e.k === 4 ? 'squeal' : 'ping', { x, vol: e.k === 4 ? 0.4 : 1 });
+    this.fx.burst('ember', x, y + 0.6, 0.4, 8, { power: 0.6 });
+    this.pings = this.pings || [];
+    this.pings.push({ who: e.who, k: e.k, x, y: y + 1.6, t: 0 });
+  }
+  buildColdOpen() {
+    const app = this.app, dev = app.graphicsDevice;
+    const rig = new Rig(app, { variant: 3 }); rig.root.setLocalScale(SCALE, SCALE, SCALE);
+    const hand = ent(app.root, null, null, 0, 0, 0);
+    const stick = stickMesh(dev);
+    const arm = ent(hand, stick, mats().world); const f = [0, 1, 2].map(() => ent(hand, stick, mats().world));
+    this.cold = { rig, hand, arm, f, x: -3, y: this.L.coldOpen.y, lift: 0, taken: false };
+  }
+  /** a doll runs past you in the fog; something long reaches down out of the dark and takes it */
+  coldOpen(dt, time) {
+    const c = this.cold, co = this.L.coldOpen;
+    if (!c) { this.coldT = null; return; }
+    this.coldT += dt;
+    const t = this.coldT;
+    if (t < 2.6) { c.x = Math.min(co.x, -3 + t * 5); }
+    const reach = t < 2.0 ? 0 : Math.min(1, (t - 2.0) / 0.45);
+    const lift = t < 2.6 ? 0 : Math.min(1, (t - 2.6) / 0.9) ** 1.6;
+    if (t > 2.45 && !c.taken) { c.taken = true; this.sfx.play('stab', { x: co.x }); this.sfx.play('farscream', { x: co.x, vol: 3 }); this.fx.shake(0.6); }
+    if (c.taken && t < 4.2 && Math.random() < dt * 30) this.fx.burst(this.goreMode === 'stitched' ? 'wad' : 'dye', c.x, c.y + 0.6 + lift * 9, 0.2, 2, { power: 0.6, dir: [0, -1, 0] });
+    const y = c.y + lift * 12;
+    c.rig.pose(dt, { x: c.x, y, z: -0.6, facing: 1, speed: t < 2.4 ? 5 / SCALE : 0, vx: t < 2.4 ? 5 : 0, vy: lift ? 3 : 0, crouch: false, anim: c.taken ? 'fear' : 'walk', t: time, noShadow: true });
+    // the arm: down out of the dark above, three long fingers closing on it
+    const top = c.y + 16, hy = c.y + 1.1 + (1 - reach) * 12 + lift * 12;
+    setStick(c.arm, co.x + 1.2, top, co.x + 0.1, hy + 0.3, -0.7, 0.16);
+    c.f.forEach((e, i) => setStick(e, co.x + 0.1, hy + 0.3, co.x + (i - 1) * 0.28 * (c.taken ? 0.4 : 1), hy - 0.55, -0.7 + (i - 1) * 0.1, 0.05));
+    if (t > 4.8) { c.rig.destroy(); c.hand.destroy(); this.cold = null; this.coldT = null; this.hud.card(this.L.cps[0].name, this.chapterLine()); }
+  }
+  /** a caption for a sound that matters, if it is near (and not said in the last few seconds) */
+  cap(text, x = null) {
+    if (this.attract || (x != null && Math.abs(x - this.cam.x) > 16)) return;
+    const now = this.time; this.capAt = this.capAt || {};
+    if (now - (this.capAt[text] ?? -9) < 4) return;
+    this.capAt[text] = now; this.hud.caption?.(text);
+  }
+  /** what a death leaves: the body, where it fell, for the rest of the chapter */
+  bodyFor(p, why, x, y) {
+    const { L, W } = this, b = p.b;
+    if (why === 'caged' || why === 'retry' || p.hid) return;
+    const wi = L.waters.findIndex((w) => x > w.x0 && x < w.x1 && W.wl[w.i] > y);
+    const inRoom = roomAt(L, x, y);
+    this.gore.spawn({ x, y, facing: b.facing, vx: b.vx, vy: b.vy, variant: p.slot, why: why === 'worm' ? 'taken' : why, solids: inRoom ? L.solids.concat(this.roomBoxes(this.T())) : L.solids, open: (s) => this.space.open(s), fx: this.fx, level: wi >= 0 ? W.wl[wi] : null, g: Math.cos(b.ang || 0) < 0 ? -1 : 1 });
+    p.hid = true;
+  }
   die(why, k) { if (this.dying || this.W.phase !== 'play' || this.attract) return; this.dying = true; this.intent({ t: 'die', why, k }); }
   onDie(e) {
     const W = this.W, sfx = this.sfx, fx = this.fx, L = this.L;
@@ -494,13 +619,7 @@ export class Game {
         default: break;
       }
       // the doll stops being a doll: a body, where it fell, for the rest of the chapter
-      if (e.why !== 'caged' && e.why !== 'retry' && !p.hid) {
-        const wi = L.waters.findIndex((w) => x > w.x0 && x < w.x1 && W.wl[w.i] > y);
-        const inRoom = roomAt(L, x, y);
-        this.gore.spawn({ x, y, facing: b.facing, vx: b.vx, vy: b.vy, variant: p.slot, why: e.why === 'worm' ? 'taken' : e.why, solids: inRoom ? L.solids.concat(this.roomBoxes(this.T())) : L.solids, open: (s) => this.space.open(s), fx, level: wi >= 0 ? W.wl[wi] : null, g: Math.cos(b.ang || 0) < 0 ? -1 : 1 });
-        p.hid = true;
-        if (e.why === 'fell' || e.why === 'water') { /* the body goes on, the camera stays */ }
-      }
+      this.bodyFor(p, e.why, x, y);
       b.vx = 0; if (!p.fall) b.vy = 0;
     }
     if (e.why === 'possessed') { const k = this.players[e.k], v = victims[0]; if (k && v) this.hud.toast(`The worm in ${k.name} killed ${v.name}.`); }
@@ -517,6 +636,7 @@ export class Game {
   }
   onRespawn(e) {
     const W = this.W;
+    W.down = null;
     W.epoch = e.ep; W.cp = e.cp; W.phase = 'play'; W.traps = []; W.slabs = []; W.wake = 0; W.scream = false; W.wT0 = {}; W.plates = []; W.levers = []; W.rings = [];
     for (const w of this.L.waters) if (w.lock && !(w.drain && W.open[w.drain])) W.open[w.lock] = true;
     for (const c of this.L.crates) { const keep = c.x0 < this.L.cps[e.cp].x - 1 && c.x > this.L.cps[e.cp].x; if (!keep) { c.x = c.x0; c.y = c.y0; c.vx = c.vy = 0; c.tx = c.ty = undefined; } }
@@ -557,13 +677,20 @@ export class Game {
       if (!this.isHost) for (const c of L.crates) if (c.tx != null) { const k = Math.min(1, dt * 12); c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k; }
       space.begin(T, W.open, this.bridges());
       // ---- me
-      const can = W.phase === 'play' && !this.attract && !this.paused && (this.startedAt == null || T > 0);
+      const can = W.phase === 'play' && !this.attract && !this.paused && (this.startedAt == null || T > 0) && this.coldT == null;
       const hanging = b.hang;
       let inp = can ? { x: input.dirX, y: input.dirY, jump: input.tap('jump') || (!hanging && input.tap('up') && !this.input.touch.y), jumpHeld: input.held('jump') || input.held('up'), brace: input.held('brace'), sneak: input.dirY < 0 } : NONE;
       this.wormSafe = Math.max(0, this.wormSafe - dt);
       if (can && this.wormT > 0 && !b.dead) inp = this.ridden(dt, T) || inp;
       if (can && this.latchT > 0 && !b.dead) inp = this.drunk(dt);
       this.usedTap = false;
+      if (W.down && W.phase === 'play' && !this.attract) {
+        if (b.dead && W.down.who === this.meIdx) { if (input.tap('use') || input.tap('jump')) this.intent({ t: 'ping', k: 1, x: W.down.x, y: W.down.y }); }
+        else if (!b.dead && Math.abs(b.x - W.down.x) < 1.4 && Math.abs(b.y - W.down.y) < 1.5 && input.held('use')) { this.stitchT = (this.stitchT || 0) + dt; if (this.stitchT > 0.8) { this.stitchT = 0; this.intent({ t: 'stitch', k: W.down.who }); } }
+        else this.stitchT = 0;
+      }
+      if (can && !this.attract) for (const [k, code] of [[1, 'emote1'], [2, 'emote2'], [3, 'emote3'], [4, 'emote4']]) if (input.tap(code) && !((this.pingCd || 0) > 0)) { this.pingCd = 0.6; this.intent({ t: 'ping', k, x: b.x + (k === 1 || k === 3 ? b.facing * 2.2 : 0), y: b.y }); }
+      this.pingCd = Math.max(0, (this.pingCd || 0) - dt);
       if (me.grub && !b.dead && can) {
         // left is right, jump is creep: the Puppeteer's grub has your strings
         inp = { ...inp, x: -inp.x, jump: input.tap('down'), jumpHeld: input.held('down'), sneak: input.held('jump') || input.held('up') };
@@ -584,6 +711,8 @@ export class Game {
       else { const rm = b.hold ? L.rooms.find((r) => r.id === b.holdRoom) : roomAt(L, b.x, b.y); if (rm) this.stepInRoom(rm, b, inp, dt, links, T); else { b.ang = 0; b.waist = WAIST; stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0 }); } }
       this.mud(b, dt);
       if (can && !b.dead) { this.breathe(b, dt); this.pushCrates(b, inp, dt); this.rotting(b, dt, T); }
+      if (can && !b.dead && !(this.btnT > 0)) for (const bt of L.buttons) if (!W.found.includes(`b${bt.k}`) && Math.abs(b.x - bt.x) < 0.65 && Math.abs(b.y - bt.y) < 1.1) { this.btnT = 1; this.intent({ t: 'button', k: bt.k }); }
+      this.btnT = Math.max(0, (this.btnT || 0) - dt);
       if (b.ground && Math.abs(b.vx) > 0.3 && L.creaky.some((c) => b.x > c.x0 && b.x < c.x1)) { b.noise = Math.max(b.noise, 0.5); if ((this.creakT = (this.creakT || 0) - dt) <= 0) { this.creakT = 0.5 + Math.random() * 0.5; this.sfx.play('creak', { x: b.x, vol: 0.5 }); } }
       b.hidden = !b.dead && b.ground && b.sneak && Math.abs(b.vx) < 0.2 && L.sacks.some((s) => Math.abs(b.x - s.x) < (s.w || 0.9) / 2 && Math.abs(b.y - s.y) < 0.4);
       if (this.spool) { const s = this.spool; if (roomAt(L, s.x, s.y) || roomAt(L, b.x, b.y)) { s.mode = 'follow'; const c = Math.cos(b.ang || 0); s.x = b.x - b.facing * 0.55; s.y = b.y + (c < 0 ? -0.35 : 0.05); s.vx = s.vy = 0; } else this.stepSpoolAll(dt, can); }
@@ -700,12 +829,13 @@ export class Game {
     if (st.turning) {
       if (b.hold == null) { b.holdRoom = rm.id; b.hold = b.braced || inp.brace ? 'frame' : 'world'; [b.fx, b.fy] = flip(rm, st.from, b.x, b.y); b.ax = b.x; b.ay = b.y; b.angFrom = st.from * Math.PI; }
       if (b.hold === 'frame' && !inp.brace) { b.hold = 'world'; b.ax = Math.max(rm.x0 + 0.8, Math.min(rm.x1 - 0.8, b.x)); b.ay = Math.max(rm.y0 + 0.8, Math.min(rm.y1 - 1.2, b.y)); b.angFrom = b.ang; } // (let go part way: it stays, within the walls) // let go part way: it stays where it is now
+      if (b.hold === 'frame' && !b.heldThis) { b.heldThis = true; this.turnsHeld = (this.turnsHeld || 0) + 1; if (this.turnsHeld >= 5) this.hud.achieve?.('turns'); }
       if (b.hold === 'frame') { [b.x, b.y] = spin(rm, st.angle - st.from * Math.PI, ...flip(rm, st.from, b.fx, b.fy)); b.ang = st.angle; b.braced = true; b.ground = true; }
       else { b.x = b.ax; b.y = b.ay; b.ang = b.angFrom; b.braced = false; b.ground = false; }
       b.vx = 0; b.vy = 0; b.waist = WAIST * Math.cos(b.ang);
       return;
     }
-    if (b.hold) { if (b.hold === 'world') b.flungY = flip(rm, st.rot, b.x, b.y)[1]; b.hold = null; b.ground = false; }
+    if (b.hold) { if (b.hold === 'world') b.flungY = flip(rm, st.rot, b.x, b.y)[1]; b.hold = null; b.heldThis = false; b.ground = false; }
     const s = st.rot ? -1 : 1;
     [b.x, b.y] = flip(rm, st.rot, b.x, b.y); b.vx *= s; b.vy *= s; b.facing *= s;
     const fl = st.rot ? links.map((o) => ({ ...o, x: 2 * rm.cx - o.x, y: 2 * rm.cy - o.y, vx: -(o.vx || 0), vy: -(o.vy || 0), waist: -(o.waist ?? WAIST) })) : links;
@@ -836,6 +966,7 @@ export class Game {
     }
     for (const e of L.eels) {
       const ph = eelAt(e, T);
+      if (ph.warn && Math.abs(e.x - b.x) < 9) this.cap('[a crackle under the water]', e.x);
       if (ph.flash && this.eelBeat[e.x] !== ph.beat) {
         this.eelBeat[e.x] = ph.beat;
         const wet = (q) => q.y + 0.4 < this.levelUnder(q.x) && Math.abs(q.x - e.x) < e.r;
@@ -866,7 +997,8 @@ export class Game {
       // tied on both sides (the middle of three or four), you climb toward whichever side you push
       if (b.hang && (key === 'chasm' || key === 'chasm1' || !key)) key = this.meIdx > 0 && this.meIdx < this.n - 1 ? 'hangMid' : 'hang';
       key = this.collectorHint(b) || key;
-      if (this.latchT > 0) key = 'latched';
+      if (this.W.down && this.W.down.who !== this.meIdx) { key = 'restitch'; vars = { name: this.players[this.W.down.who]?.name || '' }; }
+      else if (this.latchT > 0) key = 'latched';
       else if (this.me.rot != null) key = 'rotting';
       else if (this.me.grub) key = 'grubbed';
       else if (this.me.mothed != null) key = 'mothed';
@@ -880,6 +1012,7 @@ export class Game {
       else if (this.nearLever(b) >= 0) use = 'HOLD';
       else if (this.spool) use = this.spool.mode === 'follow' ? (this.nearHook(b) ? 'HANG' : b.ground ? 'SET' : null) : this.spool.mode === 'return' ? null : 'CALL';
     }
+    if (this.W.down && this.W.down.who === this.meIdx && !this.attract) key = 'down';
     const hk = key ? `${key}:${vars.name || ''}` : null;
     if (hk !== this.hintKey) { this.hintKey = hk; hud.hint(key, vars); }
     if (use !== this.useLabel) { this.useLabel = use; hud.use(use); }
@@ -996,7 +1129,7 @@ export class Game {
       const st = roomState(r, T, W.turnAt[r.id]);
       scene.setRoom(r.id, st.angle);
       const near = Math.abs((r.x0 + r.x1) / 2 - this.cam.x) < (r.x1 - r.x0) / 2 + 12;
-      if (st.warn != null && near && this.roomWarned[r.id] !== st.n) { this.roomWarned[r.id] = st.n; sfx.play('drum', { x: (r.x0 + r.x1) / 2 }); fx.shake(0.3); }
+      if (st.warn != null && near && this.roomWarned[r.id] !== st.n) { this.roomWarned[r.id] = st.n; this.cap('[the drum groans]'); sfx.play('drum', { x: (r.x0 + r.x1) / 2 }); fx.shake(0.3); }
       if (st.warn != null && near && live && Math.random() < dt * 18) fx.burst('dust', r.x0 + Math.random() * (r.x1 - r.x0), r.y0 + 1, 0.3, 1, { dir: [0, 0.8, 0], power: 0.5 });
       if (st.turning && near) fx.shake(0.25);
     }
@@ -1026,6 +1159,9 @@ export class Game {
     if (!this.attract) this.dread(dt, T, live);
     fx.update(dt);
     this.gore.update(dt);
+    for (const o of this.others || []) o.update(dt, this.attract ? -999 : me.b.x, W.open, time);
+    for (const [i, c] of (this.caged || []).entries()) { c.r.pose(dt, { x: c.x + Math.sin(time * 0.6 + i) * 0.05, y: c.y, z: -1.8, facing: i % 2 ? 1 : -1, speed: 0, vx: 0, vy: 0, crouch: false, anim: 'hang', t: time + i, noShadow: true }); c.r.root.rotate(0, 0, Math.sin(time * 0.5 + i * 2) * 4); }
+    if (this.coldT != null) this.coldOpen(dt, time);
     for (const [k, mv] of (this.mothers || []).entries()) { const w = L.waters.filter((q) => q.look === 'mother')[k]; mv.update(dt, W.wT0[w.id] != null ? W.wl[w.i] : null, T); for (const c of L.candles) c.out = W.wT0[w.id] != null && W.wl[w.i] > c.y + 0.7; }
     if (this.rats) {
       this.rats.update(dt, T, W.swarm, this.lights(), (i) => (W.wT0[L.waters[i].id] != null ? W.wl[i] : null), this.cam.x);
@@ -1076,14 +1212,25 @@ export class Game {
     sfx.listenerX = this.cam.x;
     R.setLights(lights, this.cam.x, this.cam.y - 1.5);
     R.frame(time, { amb: [0.2, 0.215, 0.21], moon: [0, 0, 0], fogStart: -1.2, fogMul: 1, dawn: 0, moonUv: [0, 0, 0.01, 0], expo: this.hud.expo ?? 1 });
+    // ---- pings and emotes: a mark over the spot, a moment
+    if (this.pings && this.pings.length) {
+      const GLYPH = ['', '!', '~', '>', '!!'];
+      for (const q of this.pings) q.t += dt;
+      this.pings = this.pings.filter((q) => q.t < 2.2);
+      this.hud.marks(this.pings.map((q) => { const s = this.project(q.x, q.y + q.t * 0.3); return s ? { id: `${q.who}-${q.k}-${q.x.toFixed(2)}`, text: q.k === 3 ? (q.x > this.players[q.who].b.x ? '→' : '←') : GLYPH[q.k], x: s[0], y: s[1], a: Math.min(1, (2.2 - q.t) * 2), slot: this.players[q.who]?.slot ?? 0 } : null; }).filter(Boolean));
+    } else if (this.hadMarks) this.hud.marks([]);
+    this.hadMarks = !!(this.pings && this.pings.length);
+    // the cold: a thread going out, counted
+    if (W.down && W.phase === 'play') { const left = Math.max(0, W.down.until - T); this.hud.cold(left / 6); } else if (this.coldShown !== false) this.hud.cold(null);
+    this.coldShown = !!W.down;
     // ---- names over the others
     if (this.n > 1 && !this.attract) {
       const tags = [];
-      for (const p of this.players) { if (p.me || p.hid) continue; const s = this.project(p.b.x, p.b.y + 1.45); if (s) tags.push({ id: p.id, name: p.name, x: s[0], y: s[1] }); }
+      for (const p of this.players) { if (p.me || p.hid) continue; const s = this.project(p.b.x, p.b.y + 1.45); if (s) tags.push({ id: p.id, name: this.hud.streamer ? `P${p.i + 1}` : p.name, x: s[0], y: s[1] }); }
       this.hud.tags(tags);
     }
     // ---- the end
-    if (W.phase === 'won' && this.wonT > 5 && !this.ended) { this.ended = true; this.hud.end({ n: this.n, time: this.result?.time ?? 0, deaths: this.result?.d ?? W.deaths, cut: this.result?.cut ?? W.cut, ending: this.result?.ending || 'wind', split: !!this.result?.split, found: W.found.length }); this.onSave?.({ done: true, ending: this.result?.ending || 'wind', deaths: W.deaths }); }
+    if (W.phase === 'won' && this.wonT > 5 && !this.ended) { this.ended = true; this.hud.end({ n: this.n, time: this.result?.time ?? 0, deaths: this.result?.d ?? W.deaths, cut: this.result?.cut ?? W.cut, causes: W.causes || {}, stitches: W.stitches || 0, ending: this.result?.ending || 'wind', split: !!this.result?.split, found: W.found.length }); this.onSave?.({ done: true, ending: this.result?.ending || 'wind', deaths: W.deaths }); const r = this.result || {}; this.hud.achieve?.(r.ending || 'wind'); if (!(r.d ?? W.deaths)) this.hud.achieve?.('unbroken'); if (!(r.cut ?? W.cut)) this.hud.achieve?.('nocut'); }
     if (W.phase !== 'won') this.ended = false;
   }
   /** how afraid to be, and everything that follows from it: the edges, the heart, the drone, the dark */

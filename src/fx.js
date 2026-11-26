@@ -72,7 +72,7 @@ export class FX {
   }
   /** a number that floats up from a spot in the world (drawn by the HUD's tags) */
   float(text, x, y, z, cls = 'gain') { this.floats.push({ text, x, y, z, t: 0, life: 1.1, cls, id: (this.fid = (this.fid || 0) + 1) }); if (this.floats.length > 14) this.floats.shift(); }
-  shake(k) { this.shakeK = Math.min(1, Math.max(this.shakeK, k)); }
+  shake(k) { this.shakeK = Math.min(1, Math.max(this.shakeK, k)); if (this.onShake && k > 0.3) this.onShake(k); }
 
   update(dt) {
     for (let i = this.live.length - 1; i >= 0; i--) {

@@ -5,7 +5,7 @@ export default {
   id: 'spindle', num: 15, act: 5, name: 'THE MOTH TOWER',
   card: ['The Spindle.', 'And a crack of something pale above it.'],
   build(k) {
-    const { L, nb, n, solo, solid, ground, cp, deco, hint, zone, begin } = k;
+    const { button, other, L, nb, n, solo, solid, ground, cp, deco, hint, zone, begin } = k;
     const y = 0;
     const moths = (x, yy) => L.monsters.push({ kind: 'moths', id: `m${L.monsters.length}`, x, y: yy + 1.4 });
     begin('THE MOTH TOWER', 0, 60);
@@ -38,6 +38,7 @@ export default {
     L.ends.push({ kind: 'unpick', x0: tx + 2.8, x1: tx + 5.2, y: top });
     deco('daylight', tx + 24, top);
     L.ends.push({ kind: 'cut', x0: tx + 21.5, x1: tx + 26.5, y: top });
+    other([{ x: tx + 17, y: top }, { x: tx + 24, y: top }]);
     solid(tx + 27, top, tx + 40, top + 11);
     L.x1 = tx + 40;
     zone('tower', -14, L.x1);

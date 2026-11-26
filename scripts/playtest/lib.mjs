@@ -11,7 +11,7 @@ fs.mkdirSync(SHOTS, { recursive: true });
 export async function launch() {
   // TB_SHOW=1: a real window you can watch (with sound)
   const show = !!process.env.TB_SHOW;
-  return chromium.launch({ channel: 'chrome', headless: !show, args: [...(show ? ['--start-maximized'] : ['--mute-audio']),'--enable-gpu', `--use-angle=${process.platform === 'darwin' ? 'metal' : 'd3d11'}`, '--ignore-gpu-blocklist', '--enable-webgl', '--autoplay-policy=no-user-gesture-required'] });
+  return chromium.launch({ channel: 'chrome', headless: !show, args: [...(show ? ['--start-maximized'] : ['--mute-audio']),'--enable-gpu', `--use-angle=${process.platform === 'darwin' ? 'metal' : 'd3d11'}`, '--ignore-gpu-blocklist', '--enable-webgl', '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] });
 }
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export async function page(browser, url, { viewport = { width: 1280, height: 720 }, ...more } = {}) {

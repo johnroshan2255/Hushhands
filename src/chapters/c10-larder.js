@@ -6,7 +6,7 @@ export default {
   id: 'larder', num: 10, act: 3, name: 'THE LARDER',
   card: ['It was always hungry.', 'It was fed on what the Collector could not use.'],
   build(k) {
-    const { L, n, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
+    const { button, other, L, n, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
     const y = 0;
     const boards = (x0, x1) => solid(x0, y - 0.25, x1, y, { thin: true, boards: true });
     const island = (x0, x1) => solid(x0, y - 30, x1, y, { ground: true });
@@ -26,6 +26,7 @@ export default {
     L.creaky.push({ x0: 28.5, x1: 46 });
     for (const x of [31.6, 35.2, 38.8, 42.4]) sack(x);
     hint(28, 32, 'sacks');
+    button(6, 37.0, y); // between the sacks, on the creaking boards
     cp(47.2, y, 'THE HOOKS');
     // 3. the hooks: knock the meat down behind you, go while it chews
     L.creaky.push({ x0: 48.5, x1: 62 });

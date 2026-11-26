@@ -60,7 +60,7 @@
       if (jumpT > 0) { hold('Space'); jumpT--; if (jumpT === 0) release('Space'); }
       yield;
     }
-    release('KeyD'); release('KeyA'); release('Space'); if (!o.keep) release('KeyS');
+    release('KeyD'); release('KeyA'); release('Space'); if (!o.keep) release('KeyS'); if (o.brace) release('ShiftLeft');
   }
   const wormClear = (w, need) => { const T = G.T(), ph = (((T + w.off) % w.period) + w.period) % w.period; return ph > w.up + 0.05 && w.period - ph > need; };
   function* passWorms(list) {
@@ -102,7 +102,7 @@
   // ------------------------------------------------------------------ the journey, lantern by lantern
   const S = {};
   /** through the arch at the chapter's end, everyone side by side */
-  function* toExit() { const e = L().exit; if (!e) return; const Lnow = L(); yield* walkTo(e.x + 3.3 - role() * 0.75, { wait: false, tol: 0.25, done: () => L() !== Lnow || W().phase === 'leaving' }); }
+  function* toExit(hop) { const e = L().exit; if (!e) return; const Lnow = L(); yield* walkTo(e.x + 3.3 - role() * 0.75, { wait: false, tol: 0.25, hop, done: () => L() !== Lnow || W().phase === 'leaving' }); }
   S['pit:0'] = function* () { // the scrap pit: the plates
     const P = L().plates.filter((p) => p.id === 'g0');
     if (solo()) { yield* walkTo(P[0].x); yield* setSpool(); yield* walkTo(P[1].x); }
@@ -113,15 +113,15 @@
     yield* toExit();
   };
   S['meadow:0'] = function* () { // the meadow: traps, then the worm bed
-    const traps = L().traps, lastTrap = traps[traps.length - 1].x;
-    yield* walkTo(lastTrap + 2, { hop: (dir) => traps.some((t, i) => !W().traps[i] && (t.x - b().x) * dir > 0.75 && (t.x - b().x) * dir < 1.2) });
+    const traps = L().traps, w0 = L().worms[0].x, hop = (dir) => traps.some((t, i) => !W().traps[i] && (t.x - b().x) * dir > 0.75 && (t.x - b().x) * dir < 1.2);
+    yield* walkTo(Math.max(...traps.filter((t) => t.x < w0).map((t) => t.x)) + 2, { hop });
     yield* passWorms(L().worms.filter((w) => w.dir > 0));
-    yield* toExit();
+    yield* toExit(hop);
   };
   S['chasm:0'] = function* () { // the chasm
     const jetty = L().solids.find((s) => s.thin && L().hooks[0] && Math.abs(s.x1 - 0.3 - L().hooks[0].x) < 0.01), tip = jetty.x1;
     const far = L().solids.find((s) => s.ground && Math.abs(s.x0 - (tip + 4.2)) < 0.01);
-    const across = (q) => q.ground && q.x > far.x0 && Math.abs(q.y - far.y1) < 0.2;
+    const across = (q) => q.ground && q.x > far.x0 + 0.45 && Math.abs(q.y - far.y1) < 0.2;
     function* swingOver() {
       yield* until(() => b().hang, 300, 'hanging');
       release('KeyD');
@@ -627,7 +627,7 @@
         bot.deaths++;
         say(`died (${G.lastWhy}) in ${bot.sec}: ${document.getElementById("toast")?.textContent || ""} (k at ${G.mon.find((m) => m.kind === "collector")?.x.toFixed(1)} ${G.mon.find((m) => m.kind === "collector")?.mode}; ${G.players.map((p) => `${p.b.x.toFixed(1)}${p.b.braced ? "B" : ""}${p.b.caged ? "C" : ""}`).join(" ")})`);
         if (bot.deaths > (window.__botLives || 12)) { bot.failed = `${bot.sec}: died too often`; return; }
-        while (W().phase !== 'play') yield;
+        while (W().phase !== 'play' || b().dead) yield;
         for (let i = 0; i < 50; i++) yield;
       }
     }
@@ -651,6 +651,15 @@
     }
     if (bot.ridden) { bot.ridden = false; key('keyup', 'Space'); say('tore it out'); }
     if (!!G.me.grub !== !!bot.grub) { bot.grub = !!G.me.grub; releaseAll(); say(bot.grub ? 'grubbed' : 'the grub is off'); }
+    // a friend down: go to the body and stitch them back (a person would)
+    const D = W().down;
+    if (D && !b().dead && D.who !== G.meIdx && Math.abs(D.x - b().x) < 9) {
+      if (!bot.stitching) { bot.stitching = true; releaseAll(); say('stitching a friend back'); }
+      const dx = D.x - b().x;
+      if (Math.abs(dx) > 0.6) { hold(dx > 0 ? 'KeyD' : 'KeyA'); release(dx > 0 ? 'KeyA' : 'KeyD'); release('KeyE'); } else { release('KeyD'); release('KeyA'); hold('KeyE'); }
+      return;
+    }
+    if (bot.stitching) { bot.stitching = false; releaseAll(); }
     if (G.latchT > 0) {
       if (!bot.drunk) { bot.drunk = true; releaseAll(); say('a Drinker is on me'); }
       if (bot.frames % 6 === 0) key('keydown', 'Space'); else if (bot.frames % 6 === 3) key('keyup', 'Space');

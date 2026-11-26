@@ -28,6 +28,9 @@
     <div id="hint" hidden></div>
     <div id="toast" hidden></div>
     <div id="breath" hidden><i></i></div>
+    <div id="captions" aria-live="polite"></div>
+    <div id="marks" aria-hidden="true"></div>
+    <div id="cold" hidden><i></i><span>THE THREAD IS GOING COLD</span></div>
     <div id="rotring" hidden><i></i></div>
   </div>
   <div id="touch" hidden>
@@ -134,6 +137,8 @@
       <p>Reach the <b>Great Spindle</b> at the far end of the Loom, every one of you, and stand in its rings together. Each lantern you reach is where you come back to when something gets you.</p>
       <h3>HOW TO PLAY</h3>
       <div class="keys" id="iKeys"></div>
+      <h3>JOURNEY</h3>
+      <p id="iJourney"></p>
       <h3>WHAT HUNTS YOU</h3>
       <ul class="dangers">
         <li><b>The crawler</b> is blind. It hangs from the den's roof and listens. Creep under it; stand still when it is over you.</li>
@@ -154,6 +159,9 @@
       <label class="slider"><span>SOUND</span><input type="range" id="sSfx" min="0" max="100" /></label>
       <label class="slider"><span>MUSIC</span><input type="range" id="sMusic" min="0" max="100" /></label>
       <label class="slider"><span>BRIGHTNESS</span><input type="range" id="sBright" min="70" max="150" /></label>
+      <div class="toggle"><span>CAPTIONS</span><button class="btn small" id="sCap">OFF</button><small>words for the sounds that matter</small></div>
+      <div class="toggle"><span>VOICE</span><button class="btn small" id="sVoice">OFF</button><small id="sVoiceS">talk to those near you, together</small></div>
+      <div class="toggle"><span>STREAMER</span><button class="btn small" id="sStream">OFF</button><small>hide codes and names</small></div>
       <div class="toggle"><span>GORE</span><button class="btn small" id="sGore">FULL</button><small id="sGoreS">red dye, torn limbs</small></div>
       <div class="keys" id="pKeys"></div>
       <div class="row">
@@ -172,6 +180,7 @@
       <svg class="thread" viewBox="0 0 400 26" aria-hidden="true"><path d="M2 8 C 70 30, 130 -6, 200 13 S 330 28, 398 9" /><circle cx="200" cy="13" r="4.2" /></svg>
       <p id="eLine"></p>
       <p class="stats" id="eStats"></p>
+      <p class="stats" id="eCauses"></p>
     </div>
     <nav class="stack">
       <button class="btn primary" id="eAgain">AGAIN</button>

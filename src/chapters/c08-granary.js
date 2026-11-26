@@ -5,7 +5,7 @@ export default {
   id: 'granary', num: 8, act: 3, name: 'THE GRANARY OF GNAWERS',
   card: ['They ate the grain.', 'Then they ate what came for the grain.'],
   build(k) {
-    const { L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit, deadDoll } = k;
+    const { button, other, L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit, deadDoll } = k;
     const y = 0;
     begin('THE GRANARY OF GNAWERS', 0, 30);
     ground(0, 52, y);
@@ -18,6 +18,8 @@ export default {
     deco('ratholes', 12.5, y); deco('ratholes', 44, y);
     deco('sacks', 20, y); deco('sacks', 33, y, { s: 1.3 });
     deadDoll(27, y, { stripped: true });
+    button(4, 40.5, y); // out on the floor of them
+    other([{ x: 46.5, y }, { x: 51.4, y }]);
     cp(47.5, y, 'THE GAP');
     // 2. the gap: toss the lamp over, jump into its light, take it up again
     solid(52, -30, 53.8, -8, { ground: true });

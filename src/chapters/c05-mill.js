@@ -5,7 +5,7 @@ export default {
   id: 'mill', num: 5, act: 2, name: 'THE DROWNED MILL',
   card: ['The mill is still filling.', 'It has been filling for a long time.'],
   build(k) {
-    const { L, n, solo, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
+    const { button, other, L, n, solo, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
     const pool = (id, x0, x1, floor, surface) => { solid(x0, floor - 30, x1, floor, { ground: true }); L.waters.push({ id, kind: 'pool', x0, x1, y0: surface, y1: surface, floor }); };
     begin('THE DROWNED MILL', 0, 30);
     // 1. the flooded stair: swim, and dive under the wall that comes down into the water
@@ -31,6 +31,8 @@ export default {
     L.eels.push({ x: 58, y: -1.6, r: 3.6, period: 4.6, off: 0 });
     L.eels.push({ x: 68, y: -1.6, r: 3.6, period: 4.6, off: 2.3 });
     hint(51.5, 56, 'eel');
+    button(2, 57.2, -2.5); // at the bottom, by the first eel
+    other([{ x: 76.5, y: 2.0 }, { x: 79, y: 0 }, { x: 84, y: 0 }]);
     solid(72, -30, 78, 2.0, { ground: true });
     cp(75, 2.0, 'THE CISTERN');
     // 4. the Cistern: the door shuts behind you and the water comes in; every wheel at once

@@ -5,7 +5,7 @@ export default {
   id: 'fen', num: 7, act: 2, name: 'THE FEN OF DRINKERS',
   card: ['They are drawn to the thread.', 'To what keeps you alive.'],
   build(k) {
-    const { L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit, deadDoll } = k;
+    const { button, other, L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit, deadDoll } = k;
     const y = 0;
     // more lit threads draw more of them: one more for each past two
     const extra = Math.max(0, n - 2);
@@ -60,6 +60,8 @@ export default {
     for (let i = 0; i < extra; i++) drinker(151 + i * 3, y + 3.8, { x0: 132, x1: 166, sight: 6.5 });
     deco('reeds', 136, y, { w: 26 });
     deco('tree', 162, y, { s: 1.2 });
+    solid(161, y + 2.2, 163.4, y + 2.6, { thin: true }); button(12, 162.2, y + 2.6); // on the nest
+    other([{ x: 128, y }, { x: 160, y }]);
     exit(168, y);
     zone('fen', -14, L.x1);
   },

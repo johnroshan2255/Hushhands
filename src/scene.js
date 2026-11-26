@@ -265,6 +265,10 @@ export class Scene {
     }
     for (const s of L.shears) { const mb = chunk(s.x); bx(mb, s.x - 0.9, s.x + 0.9, s.y + 7.4, s.y + 9.1, -0.7, 0.7, ink()); bx(mb, s.x - 0.75, s.x - 0.55, s.y - 0.02, s.y + 0.08, -0.6, 0.6, ink()); bx(mb, s.x + 0.55, s.x + 0.75, s.y - 0.02, s.y + 0.08, -0.6, 0.6, ink()); }
     for (const r of L.rings) { const mb = chunk(r.x); bx(mb, r.x - 0.85, r.x + 0.85, r.y, r.y + 0.07, -0.85, 0.85, ink(1.2)); bx(mb, r.x - 0.95, r.x - 0.8, r.y, r.y + 0.14, -0.95, 0.95, ink()); bx(mb, r.x + 0.8, r.x + 0.95, r.y, r.y + 0.14, -0.95, 0.95, ink()); }
+    for (const [ci, c] of L.cps.entries()) {
+      const mb = chunk(c.x), count = Math.max(1, (L.num || 1) * 4 + ci * 3 + Math.floor(this.rng() * 4)), z = -2.3;
+      for (let i = 0; i < count; i++) { const g = Math.floor(i / 5), j = i % 5, gx = c.x - 2.4 - (g % 6) * 0.55, gy = c.y + 2.3 + Math.floor(g / 6) * 0.5; if (j < 4) addBeam(mb, gx + j * 0.08, gy, gx + j * 0.08 + 0.02, gy + 0.36, z, 0.018, 0.02, ink(2.2)); else addBeam(mb, gx - 0.04, gy + 0.05, gx + 0.3, gy + 0.3, z, 0.018, 0.02, ink(2.2)); }
+    }
     for (const c of L.cps) { const mb = chunk(c.x); addBeam(mb, c.x - 0.9, c.y - 0.1, c.x - 0.9, c.y + 1.75, -1.5, 0.09, 0.09, ink()); addBeam(mb, c.x - 0.9, c.y + 1.72, c.x - 0.52, c.y + 1.86, -1.5, 0.06, 0.06, ink()); addBeam(mb, c.x - 0.54, c.y + 1.86, c.x - 0.54, c.y + 1.62, -1.5, 0.02, 0.02, ink()); }
     // ---- the far world: three layers of loom-frames, towers and hulks, and the warp threads of the sky
     this.farLayers(chunk);
@@ -558,6 +562,9 @@ export class Scene {
     // sacks big enough to hide in, in front of you
     const hideM = SM('hidesack', (mb) => { addSphere(mb, { y: 0.55, r: 0.6, sy: 1.0, segW: 10, segH: 7, colFn: () => ink(1.05), jitter: 0.08, rng: this.rng }); addCylinder(mb, { y: 1.1, r0: 0.18, r1: 0.26, h: 0.25, seg: 7, colFn: () => ink() }); });
     for (const s of L.sacks) ent(root, hideM, M.world, s.x, s.y, 0.55);
+    // the lost buttons: a small pale disc with four holes, glinting
+    const btnM = SM('button', (mb) => { addAnnulus(mb, 0, 0, 0, 0, 0.11, 14, 0.04, rgba(0.82, 0.8, 0.72, 0.35)); for (let i = 0; i < 4; i++) addAnnulus(mb, ((i % 2) - 0.5) * 0.08, (Math.floor(i / 2) - 0.5) * 0.08, 0.03, 0, 0.018, 6, 0.02, ink()); });
+    this.buttons = L.buttons.map((q) => { const e = ent(root, btnM, M.world, q.x, q.y + 0.18, 0.6); const h = glow(root, 0.35, q.x, q.y + 0.18, 0.7); return { q, e, h }; });
     // crates: an old wooden box, planks and a cross-brace
     this.crates = L.crates.map((c) => { const m = SM(`crate${c.w}x${c.h}`, (mb) => { bx(mb, -c.w / 2, c.w / 2, 0, c.h, -0.55, 0.55, ink(1.15)); for (let y = 0.15; y < c.h; y += 0.3) bx(mb, -c.w / 2 - 0.02, c.w / 2 + 0.02, y, y + 0.04, -0.57, 0.57, ink(0.7)); addBeam(mb, -c.w / 2 + 0.05, 0.05, c.w / 2 - 0.05, c.h - 0.05, 0.58, 0.08, 0.02, ink(0.8)); }); return { c, e: ent(root, m, M.world, c.x, c.y, 0) }; });
     // eels: a long dark ribbon low in the water, with a pale glow that swells before it strikes
@@ -587,6 +594,7 @@ export class Scene {
     lit.length = 0;
     for (const s of this.shafts || []) lit.push({ x: s.x, y: s.y + 0.6, z: 0.9, r: 2.2 + s.w, col: [0.72, 0.8, 0.78], k: 0.55 * s.k, pri: 0 });
     for (const o of this.crates || []) o.e.setLocalPosition(o.c.x, o.c.y, 0);
+    for (const o of this.buttons || []) { const got = !!(W.found && W.found.includes(`b${o.q.k}`)); if (o.e.enabled === got) o.e.enabled = o.h.enabled = !got; if (!got) { o.e.setLocalEulerAngles(0, (T * 60) % 360, 0); const s = 0.3 + Math.sin(T * 3 + o.q.k) * 0.1; o.h.setLocalScale(s, s, s); } }
     (this.meat || []).forEach((o, k) => { const st = (W.meat && W.meat[k]) || 0; o.e.enabled = st < 2; if (st === 0) { o.e.setLocalPosition(o.q.x, o.q.hy - 0.95, 0.1); o.e.setLocalEulerAngles(0, 0, Math.sin(T * 0.8 + k) * 6); } else if (st === 1) { o.e.setLocalPosition(o.q.x, o.q.y + 0.75, 0.1); o.e.setLocalEulerAngles(0, 0, 80); } });
     (this.blooms || []).forEach((o, i) => { const gone = !!(W.blooms && W.blooms[i]); if (o.cap.enabled === gone) { o.cap.enabled = !gone; o.st.enabled = gone; o.h.enabled = !gone; } if (!gone) { const s = 1 + Math.sin(T * 2.3 + o.bl.x) * 0.06; o.cap.setLocalScale(s, s, s); lit.push({ x: o.bl.x, y: o.bl.y + 0.4, z: 0.6, r: 1.6, col: [0.7, 0.8, 0.6], k: 0.6, pri: 0 }); } });
     for (const o of this.presses || []) o.e.setLocalPosition(o.p.x + (pressWarn(o.p, T) ? Math.sin(T * 60) * 0.03 : 0), o.p.top - (o.p.top - o.p.y) * pressDown(o.p, T), 0);

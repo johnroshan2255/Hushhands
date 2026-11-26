@@ -92,6 +92,12 @@ class LoomRoom extends Room {
       }
       case 'e': case 's': if (!isHost) return; break; // only the host says what happened
       case 'p': break;
+      case 'v': { // a voice handshake, for one other
+        msg.from = client.sessionId;
+        const to = this.clients.find((c) => c.sessionId === msg.to);
+        if (to) to.send('v', msg); else this.broadcast('v', msg, { except: client });
+        return;
+      }
       default: return;
     }
     msg.from = client.sessionId;

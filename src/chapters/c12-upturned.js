@@ -6,7 +6,7 @@ export default {
   id: 'upturned', num: 12, act: 4, name: 'THE UPTURNED LOOM',
   card: ['Up and down are only', 'what the Loom says they are.'],
   build(k) {
-    const { L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit, room } = k;
+    const { button, other, L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit, room } = k;
     begin('THE UPTURNED LOOM', 0, 30);
     // up to the walkway the first hall hangs from
     ground(0, 12, 0);
@@ -23,6 +23,7 @@ export default {
     solid(52, -30, 60, 6, { ground: true });
     solid(60, -30, 62, 4.5, { ground: true }); solid(62, -30, 64, 3, { ground: true }); solid(64, -30, 66, 1.5, { ground: true });
     ground(66, 72, 0);
+    button(8, 56, 6); // on the walkway out of the hall
     cp(68, 0, 'THE DRUM');
     // 2. the drum: the lever turns it over; hold fast through the turn; the way you came in is now high
     const B = room({ id: 'drum', x0: 72, x1: 88, y0: -1, y1: 9, rot0: 0, lever: 'drum' });

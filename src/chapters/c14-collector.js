@@ -3,7 +3,7 @@ export default {
   id: 'collector', num: 14, act: 5, name: 'THE COLLECTOR’S YARD',
   card: ['Its cages are full.', 'Every doll in them is tied.'],
   build(k) {
-    const { L, solo, solid, ground, gate, deco, hint, zone, begin, exit } = k;
+    const { button, other, L, solo, solid, ground, gate, deco, hint, zone, begin, exit } = k;
     const y = 0;
     begin('THE COLLECTOR’S YARD');
     const xk = 10;
@@ -13,6 +13,10 @@ export default {
     solid(xk + 28, y + 7, xk + 28.7, y + 30);
     ground(0, xk + 50, y);
     deco('arch', xk + 28.35, y, { s: 1.4 }); deco('cages', xk + 2, y + 12, { w: 24 });
+    button(11, xk + 20, y); // in its yard, where it walks
+    // the Other Dolls, caged by the way out, hanging by their cut threads: one for each of you
+    L.caged = { x: xk + 30.6, y: y + 3.4 };
+    deco('cage', xk + 30.6, y + 2.6); deco('cage', xk + 32.2, y + 2.9);
     exit(xk + 33, y);
     zone('collector', -14, L.x1);
   },

@@ -4,7 +4,7 @@ export default {
   id: 'cathedral', num: 13, act: 5, name: 'THE GLASS BRIDGE',
   card: ['The light is thinning.', 'Something sleeps under every bell.'],
   build(k) {
-    const { L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit } = k;
+    const { button, other, L, n, solo, solid, ground, cp, deco, hint, zone, begin, exit } = k;
     const y = 0;
     begin('THE GLASS BRIDGE');
     const xs = 7;
@@ -25,6 +25,7 @@ export default {
     deco('choir', xc - 1, y + 9, { w: 28 });
     solid(xc - 5, y + 9, xc + 34, y + 30);
     hint(xb + 1.5, xc + 3, 'bells');
+    button(9, xc + 13.6, y); // right under a bell
     const xh = xc + 31;
     L.shears.push({ x: xh, y, period: 2.8, shut: 0.5, off: 0 });
     hint(xh - 6, xh - 0.8, solo ? 'shears1' : 'shears');

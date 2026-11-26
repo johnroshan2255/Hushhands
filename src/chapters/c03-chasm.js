@@ -3,7 +3,7 @@ export default {
   id: 'chasm', num: 3, act: 1, name: 'THE CHASM',
   card: ['Something was in your head.', 'It wanted the others.'],
   build(k) {
-    const { L, solo, solid, ground, cp, deco, hint, zone, begin, exit } = k;
+    const { button, other, L, solo, solid, ground, cp, deco, hint, zone, begin, exit } = k;
     let y = 0;
     begin('THE CHASM');
     const xe = 11; // the ground ends; a jetty runs on over the drop
@@ -28,6 +28,8 @@ export default {
     solid(xt, y + 2.9, xt + 24, y + 18);
     for (const [i, dx] of [3.4, 6.9, 10.4, 13.9, 17.4, 20.9].entries()) L.worms.push({ x: xt + dx, y: y + 2.9, dir: -1, period: 2.7, up: 0.95, off: i * 0.62, len: 2.5, silent: i === 2 || i === 4 });
     deco('pipes', xt, y + 2.9, { w: 24 });
+    button(10, tip - 0.2, 0); // at the very end of the jetty
+    other([{ x: xt + 26, y }, { x: xt + 34, y }]);
     exit(xt + 30, y);
     zone('tunnel', xf + 3, L.x1);
   },

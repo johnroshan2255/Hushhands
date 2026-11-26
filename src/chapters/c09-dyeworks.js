@@ -5,7 +5,7 @@ export default {
   id: 'dyeworks', num: 9, act: 3, name: 'THE DYE-WORKS',
   card: ['The rot went down the thread.', 'Into the others.'],
   build(k) {
-    const { L, n, solid, ground, cp, deco, hint, zone, begin, exit, deadDoll } = k;
+    const { button, other, L, n, solid, ground, cp, deco, hint, zone, begin, exit, deadDoll } = k;
     const y = 0;
     const bloom = (x, yy = y, r = 1.9) => L.blooms.push({ x, y: yy, r });
     begin('THE DYE-WORKS', 0, 30);
@@ -26,6 +26,7 @@ export default {
     solid(60.5, -30, 66.5, -2.6, { ground: true }); // the basin: clean water
     L.waters.push({ id: 'clean', kind: 'pool', clean: true, x0: 60.5, x1: 66.5, y0: -0.35, y1: -0.35, floor: -2.6 });
     ground(66.5, 70, y);
+    button(5, 63.6, -2.6); // at the bottom of the clean water
     deco('pipes', 58, 8, { w: 10 });
     cp(69, y, 'THE VATS');
     // 4. the vats: a walkway over the red, presses on their beat

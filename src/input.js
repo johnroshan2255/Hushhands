@@ -23,6 +23,10 @@ export class Input {
       if (k === 'ShiftLeft' || k === 'ShiftRight' || k === 'KeyK' || k === 'KeyJ') return 'brace';
       if (k === 'Space') return 'jump';
       if (k === 'Escape' || k === 'KeyP') return 'pause';
+      if (k === 'Digit1') return 'emote1';
+      if (k === 'Digit2') return 'emote2';
+      if (k === 'Digit3') return 'emote3';
+      if (k === 'Digit4') return 'emote4';
       return null;
     };
     addEventListener('keydown', (e) => {
