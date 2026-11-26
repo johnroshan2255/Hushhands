@@ -5,7 +5,7 @@
 import { LINK, wormOut, wormWarn, shearsBeat, waterLevel, eelAt, pressDown, pressBeat, pressWarn } from './level.js';
 import { buildChapter, CHAPTERS } from './chapters/index.js';
 import { Space, newBody, stepPlayer, stepSpool, newSpool, linkLen, stepCrate, WAIST, HT, HT_LOW, GRAV, HW } from './phys.js';
-import { Scene, mats, ent, halo, AMBER, sharedMesh, ink } from './scene.js';
+import { Scene, mats, ent, halo, AMBER, sharedMesh, ink, stickMesh, setStick } from './scene.js';
 import { addLathe } from './meshes.js';
 import { glowMaterial } from './render.js';
 import { Threads, SpoolView } from './rope.js';
@@ -13,6 +13,7 @@ import { Rig } from './chars.js';
 import { newMonster, thinkMonster, packMonster, unpackMonster, viewFor } from './monsters.js';
 import { unlatch, DRAIN } from './creatures/drinker.js';
 import { RatsView, litAt } from './creatures/rats.js';
+import { GRUB } from './creatures/puppeteer.js';
 import { FX } from './fx.js';
 import { Gore } from './gore.js';
 
@@ -94,7 +95,7 @@ export class Game {
     this.pressBeats = L.presses.map(() => null);
     for (const l of L.lamps) { l.by = -1; l.x = l.x0 ?? l.x; l.y = l.y0 ?? l.y; l.x0 = l.x; l.y0 = l.y; }
     this.rats = L.swarms.length || L.waters.some((w) => w.look === 'rats') ? new RatsView(app, L, this.low ? 0 : 2) : null;
-    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {}, rot: {} };
+    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {}, rot: {}, grub: {} };
     this.mon = L.monsters.map(newMonster);
     this.monViews = L.monsters.map((m) => viewFor(app, m));
     if (tripped) for (const m of this.mon) if (m.kind === 'collector') m.mode = 'down';
@@ -134,6 +135,7 @@ export class Game {
     this.threads?.destroy(); this.threads = null;
     this.spoolView?.destroy(); this.spoolView = null;
     this.rats?.destroy(); this.rats = null;
+    for (const s of this.strings || []) s?.destroy(); this.strings = [];
     for (const v of this.monViews || []) v.destroy();
     this.monViews = [];
     this.fx.clear();
@@ -231,6 +233,10 @@ export class Game {
       } else if (l.by < 0 && !L.lamps.some((q) => q.by === from) && Math.abs(p.b.x - l.x) < 1.4 && Math.abs(p.b.y - l.y) < 1.4) l.by = from;
       else return;
       this.emit({ t: 'lamp', k: i.k, by: l.by, x: l.x, y: l.y, toss: !!i.toss });
+    } else if (i.t === 'burn') { // a grub held to a candle flame
+      if (!H.grub[from]) return;
+      delete H.grub[from];
+      this.emit({ t: 'grub', who: from, on: false, how: 'burn' });
     } else if (i.t === 'meat') { // knock the meat off its hook
       const q = L.meat[i.k], p = this.players[from];
       if (!q || W.meat[i.k] || !p || Math.abs(p.b.x - q.x) > 1.3) return;
@@ -262,7 +268,7 @@ export class Game {
     if (W.phase !== 'play') return;
     W.deaths++;
     if (why === 'cut') W.cut++;
-    this.host.wormed = {}; this.host.latched = {}; this.host.rot = {};
+    this.host.wormed = {}; this.host.latched = {}; this.host.rot = {}; this.host.grub = {};
     this.host.respawnAt = this.T() + (why === 'caged' ? 2.6 : 2.0);
     this.emit({ t: 'die', who, why, x, y, k, d: W.deaths });
   }
@@ -278,11 +284,11 @@ export class Game {
     }
     if (W.phase !== 'play') return;
     // everyone who can weigh something down, or be heard
-    const bodies = this.players.map((p, i) => ({ i, x: p.b.x, y: p.b.y, vx: p.b.vx, noise: p.me ? p.b.noise : p.noise, sneak: p.b.sneak, braced: p.b.braced, ground: p.b.ground, dead: p.b.dead, anchor: p.b.braced && p.b.ground, use: p.use, real: true, lit: !(p.me ? p.b.dark > 0 : p.dark) && !p.hid, hidden: p.me ? !!p.b.hidden : !!p.hiddenNet }));
+    const bodies = this.players.map((p, i) => ({ i, x: p.b.x, y: p.b.y, vx: p.b.vx, noise: p.me ? p.b.noise : p.noise, sneak: p.b.sneak, braced: p.b.braced, ground: p.b.ground, dead: p.b.dead, anchor: p.b.braced && p.b.ground, use: p.use, real: true, lit: !(p.me ? p.b.dark > 0 : p.dark) && !p.hid, hidden: p.me ? !!p.b.hidden : !!p.hiddenNet, grub: (H.grub[i] || 0) > T }));
     if (this.spool) bodies.push({ i: -1, x: this.spool.x, y: this.spool.y, vx: 0, noise: 0, sneak: true, braced: this.spool.mode === 'planted', ground: this.spool.ground || this.spool.mode === 'planted', dead: false, anchor: this.spool.mode === 'planted', use: false, real: false, flying: this.spool.mode === 'return' || this.spool.mode === 'hooked', lit: !(this.spool.dark > 0) });
-    const on = (x, y, hw) => bodies.some((b) => !b.dead && !b.flying && b.ground && Math.abs(b.x - x) < hw && Math.abs(b.y - y) < 0.3);
+    const on = (x, y, hw, grub) => bodies.some((b) => !b.dead && !b.flying && b.ground && Math.abs(b.x - x) < hw && Math.abs(b.y - y) < 0.3 && (!grub || b.grub));
     // plates, levers, gates
-    L.plates.forEach((p, i) => { const v = on(p.x, p.y, p.w / 2 + 0.12); if (v !== !!W.plates[i]) { W.plates[i] = v; this.emit({ t: 'plate', k: i, on: v }); } });
+    L.plates.forEach((p, i) => { const v = on(p.x, p.y, p.w / 2 + 0.12, p.grub); if (v !== !!W.plates[i]) { W.plates[i] = v; this.emit({ t: 'plate', k: i, on: v }); } });
     L.levers.forEach((l, i) => { const v = bodies.some((b) => b.real && !b.dead && b.use && Math.abs(b.x - l.x) < 1.0 && Math.abs(b.y - l.y) < 1.2); if (v !== !!W.levers[i]) { W.levers[i] = v; this.emit({ t: 'lever', k: i, on: v }); } });
     for (const g of L.gates) {
       if (W.open[g.id]) continue;
@@ -302,6 +308,9 @@ export class Game {
       if (T - t0 > ROT) { delete H.rot[k]; this.kill(i, 'rot', p.b.x, p.b.y); return; }
       for (const j of [i - 1, i + 1]) { const q = this.players[j]; if (!q || q.b.dead || H.rot[j] != null) continue; if (T - t0 > Math.hypot(q.b.x - p.b.x, q.b.y - p.b.y) / ROT_SPEED + 0.6) { H.rot[j] = T; this.emit({ t: 'rot', who: j, on: true, t0: T, from: i }); } }
     }
+    // grubs fall off in time; the Puppeteer falls when its strings are cut
+    for (const [k, until] of Object.entries(H.grub)) if (until <= T) { delete H.grub[k]; this.emit({ t: 'grub', who: +k, on: false }); }
+    this.mon.forEach((m, mi) => { if (m.kind === 'puppeteer' && m.mode === 'watch' && L.monsters[mi].gate && W.open[L.monsters[mi].gate]) { m.mode = 'fallen'; this.emit({ t: 'pfall', mi }); } });
     // the swarms: out of their holes once someone is well inside
     L.swarms.forEach((s, i) => { if (!W.swarm[i] && bodies.some((b) => b.real && !b.dead && b.x > s.trigger && b.x < s.x1 + 2)) { W.swarm[i] = true; this.emit({ t: 'swarm', k: i }); } });
     // crates: they fall, float, and slide while someone pushes
@@ -329,12 +338,13 @@ export class Game {
     });
     // the hunters
     this.mon.forEach((m, mi) => {
-      for (const e of thinkMonster(m, dt, bodies, L, { meat: L.meat.map((q, k) => ({ x: q.x, state: W.meat[k] || 0, poison: q.poison })) })) {
+      for (const e of thinkMonster(m, dt, bodies, L, { meat: L.meat.map((q, k) => ({ x: q.x, state: W.meat[k] || 0, poison: q.poison })), T })) {
         if (e.t === 'stab') this.emit({ t: 'stab', x: e.x, mi });
         else if (e.t === 'grab') { if (e.i >= 0) { const p = this.players[e.i]; this.kill(e.i, 'caged', p.b.x, p.b.y, mi); } }
         else if (e.t === 'trip') this.emit({ t: 'trip', mi, x: e.x });
         else if (e.t === 'crash') { W.tripped = true; const g = L.monsters[mi].gate; if (g) W.open[g] = true; this.emit({ t: 'crash', mi, x: e.x }); if (g) this.emit({ t: 'gate', id: g }); }
         else if (e.t === 'hear') this.emit({ t: 'hear', mi });
+        else if (e.t === 'grub') { if ((H.grub[e.i] || 0) <= T) { H.grub[e.i] = T + GRUB; this.emit({ t: 'grub', who: e.i, on: true, mi }); } }
         else if (e.t === 'rise' || e.t === 'bite') this.emit({ t: `g${e.t}`, mi, x: e.x });
         else if (e.t === 'eat') { const p = this.players[e.i]; if (p && !p.b.dead) this.kill(e.i, 'swallowed', p.b.x, p.b.y, mi); }
         else if (e.t === 'meat') { W.meat[e.k] = 2; this.emit({ t: 'meat', k: e.k, state: 2 }); }
@@ -365,6 +375,8 @@ export class Game {
       case 'gate': { W.open[e.id] = true; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.burst('dust', g.x + 0.35, g.y + 0.2, 0.5, 10, { spread: 1.2 }); fx.shake(0.35); } break; }
       case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
       case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
+      case 'grub': { const p = this.players[e.who]; if (!p) break; p.grub = e.on; if (e.on) { sfx.play('squirm', { x: p.b.x, vol: 1.2 }); sfx.play('clack', { x: p.b.x }); fx.burst('ink', p.b.x, p.b.y + 1.1, 0.3, 6, { power: 0.5 }); if (p.me) { this.hud.flash('#2b2b20', 0.45, 160); fx.shake(0.3); } } else { sfx.play(e.how === 'burn' ? 'flame' : 'squirm', { x: p.b.x }); fx.burst(e.how === 'burn' ? 'ember' : 'ink', p.b.x, p.b.y + 1.1, 0.3, 12, { power: 0.8 }); } break; }
+      case 'pfall': { const m = this.mon[e.mi]; if (m) m.mode = 'fallen'; sfx.play('snip', { x: m?.x }); sfx.play('crash', { x: m?.x }); sfx.play('groan', { x: m?.x, vol: 1.5 }); fx.shake(1); this.swing = 1; for (const p of this.players) p.grub = false; break; }
       case 'meat': { W.meat[e.k] = e.state; const q = L.meat[e.k]; if (e.state === 1) { sfx.play('land', { x: q.x, vol: 1 }); sfx.play('squelch', { x: q.x }); fx.shake(0.2); } else { sfx.play('chomp', { x: q.x }); fx.burst(q.poison ? 'spore' : 'dye', q.x, q.y + 0.4, 0.3, 14, { power: 1 }); } break; }
       case 'grise': { sfx.play('creak', { x: e.x, vol: 1.4 }); sfx.play('groan', { x: e.x, vol: 0.8 }); fx.burst('dust', e.x, this.mon[e.mi].y, 0.4, 10, { spread: 1.2, power: 0.7 }); if (Math.abs(e.x - this.cam.x) < 12) fx.shake(0.35); break; }
       case 'gbite': { sfx.play('chomp', { x: e.x }); fx.shake(0.7); fx.burst('dust', e.x, this.mon[e.mi].y + 0.2, 0.4, 16, { spread: 1.5, power: 1.2 }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.4, 0.4, 8, { power: 1 }); break; }
@@ -477,7 +489,7 @@ export class Game {
     for (const w of this.L.waters) if (w.lock && !(w.drain && W.open[w.drain])) W.open[w.lock] = true;
     for (const c of this.L.crates) { const keep = c.x0 < this.L.cps[e.cp].x - 1 && c.x > this.L.cps[e.cp].x; if (!keep) { c.x = c.x0; c.y = c.y0; c.vx = c.vy = 0; c.tx = c.ty = undefined; } }
     this.drainAt = {}; this.eelBeat = {}; this.ratT = 0; W.swarm = []; W.blooms = []; W.meat = [];
-    for (const p of this.players) p.rot = null;
+    for (const p of this.players) { p.rot = null; p.grub = false; }
     if (this.host) this.host.rot = {};
     const cpx = this.L.cps[e.cp].x;
     for (const l of this.L.lamps) { if (!(l.x0 < cpx - 1 && l.x > cpx - 3 && l.by < 0)) { l.x = l.x0; l.y = l.y0; } l.by = -1; }
@@ -519,6 +531,12 @@ export class Game {
       if (can && this.wormT > 0 && !b.dead) inp = this.ridden(dt, T) || inp;
       if (can && this.latchT > 0 && !b.dead) inp = this.drunk(dt);
       this.usedTap = false;
+      if (me.grub && !b.dead && can) {
+        // left is right, jump is creep: the Puppeteer's grub has your strings
+        inp = { ...inp, x: -inp.x, jump: input.tap('down'), jumpHeld: input.held('down'), sneak: input.held('jump') || input.held('up') };
+        if (L.candles.some((c) => Math.abs(c.x - b.x) < 0.85 && Math.abs(c.y - b.y) < 1.2) && !(this.burnT > 0)) { this.burnT = 0.5; this.intent({ t: 'burn' }); }
+        this.burnT = Math.max(0, (this.burnT || 0) - dt);
+      }
       if (me.rot != null && !b.dead) inp = { ...inp, x: inp.x * 0.7, jump: inp.jump && Math.random() < 0.85 };
       const carrying = L.lamps.findIndex((l) => l.by === this.meIdx);
       if (carrying >= 0) inp = { ...inp, jump: false };
@@ -782,6 +800,7 @@ export class Game {
       key = this.collectorHint(b) || key;
       if (this.latchT > 0) key = 'latched';
       else if (this.me.rot != null) key = 'rotting';
+      else if (this.me.grub) key = 'grubbed';
       else if (this.wormT > 0) key = 'wormed';
       else { const f = this.players.find((p) => !p.me && p.wormed && Math.abs(p.b.x - b.x) < 9); if (f) { key = 'friendWormed'; vars = { name: f.name }; } const g = this.players.find((p) => !p.me && p.latched != null && Math.abs(p.b.x - b.x) < 9); if (g) { key = 'friendLatched'; vars = { name: g.name }; } }
       const carry = this.L.lamps.findIndex((l) => l.by === this.meIdx);
@@ -861,7 +880,7 @@ export class Game {
       const hs = 0.27 + Math.sin(time * 6 + p.i * 2) * 0.02 + (b.braced ? 0.25 : 0);
       p.halo.setLocalScale(hs, hs, hs);
       // a worm in the head: its tail thrashes out of the top, the eye goes red, the glow sours
-      const ridden = p.wormed && !b.dead && !p.hid;
+      const ridden = (p.wormed || p.grub) && !b.dead && !p.hid;
       if (p.worm.enabled !== ridden) p.worm.enabled = ridden;
       if (p.eye.enabled !== ridden) p.eye.enabled = ridden;
       if (ridden) {
@@ -961,9 +980,11 @@ export class Game {
     const ck = 1 - Math.exp(-dt * 3.2), cky = 1 - Math.exp(-dt * (ty < this.cam.y - 1.5 ? 4 : 1.9));
     this.cam.x += (tx - this.cam.x) * ck; this.cam.y += (ty - this.cam.y) * cky; this.cam.h += (th - this.cam.h) * (1 - Math.exp(-dt * 1.8));
     const dist = this.cam.h / (2 * Math.tan((cam.camera.fov * Math.PI) / 360));
+    this.swing = Math.max(0, (this.swing || 0) - dt * 0.35);
+    this.drawStrings(dt);
     const [shx, shy] = fx.shakeOffset(time);
     cam.setPosition(this.cam.x + shx, this.cam.y + shy, dist);
-    cam.setEulerAngles(0, 0, 0);
+    cam.setEulerAngles(0, 0, this.swing > 0 ? Math.sin(this.swing * 9) * this.swing * 22 : 0);
     cam.camera.farClip = dist + 140; cam.camera.nearClip = Math.max(1, dist - 14);
     sfx.listenerX = this.cam.x;
     R.setLights(lights, this.cam.x, this.cam.y - 1.5);
@@ -1032,6 +1053,19 @@ export class Game {
       w.e.setLocalScale(1, Math.max(0.001, open * blink), 1);
       if (w.gone > 0.2) { w.e.destroy(); this.watchers.splice(i, 1); }
     }
+  }
+  /** strings from the Puppeteer's bar down to every grubbed doll */
+  drawStrings() {
+    const pv = this.monViews.find((v) => v.barAt);
+    if (!this.strings) this.strings = [];
+    this.players.forEach((p, i) => {
+      let s = this.strings[i];
+      const on = !!(pv && p.grub && !p.b.dead && !p.hid);
+      if (!s && on) { s = this.strings[i] = ent(this.app.root, stickMesh(this.app.graphicsDevice), mats().world); }
+      if (!s) return;
+      s.enabled = on;
+      if (on) { const [bx2, by] = pv.barAt(); setStick(s, bx2 + (i - 1.5) * 0.6, by, p.b.x, p.b.y + 1.05, 0.2, 0.018); }
+    });
   }
   anchorOf(p) {
     if (this.spool) { const s = this.spool; return s.mode === 'return' ? null : [s.x, s.y + s.waist]; }

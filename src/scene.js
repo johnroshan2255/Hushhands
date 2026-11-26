@@ -289,6 +289,10 @@ export class Scene {
         bx(mb, x - 0.2, x + d.w + 0.2, y - 0.25, y + 0.15, -2.2, 2.2, ink(1.2));
         for (let sx = x; sx < x + d.w; sx += 0.9) bx(mb, sx, sx + 0.06, y - 3, y, 2.25, 2.35, ink(0.8));
         break;
+      case 'curtains': // heavy stage drapes, hanging in folds, torn at the hem
+        for (let cx = x; cx < x + d.w; cx += 0.85 + rng() * 0.5) { const top = y + 9.1, len = 3.2 + Math.sin(cx * 1.7) * 0.8 + rng() * 1.2; addBeam(mb, cx, top, cx + Math.sin(cx * 3.1) * 0.15, top - len, -3.2 - (Math.floor(cx * 2) % 2) * 0.3, 0.42, 0.25, ink(0.9 + (Math.floor(cx * 2) % 2) * 0.3), 0.3); }
+        bx(mb, x - 0.5, x + d.w + 0.5, y + 8.6, y + 9.2, -3.6, -2.8, ink());
+        break;
       case 'hooks': // a rail of hooks under the ceiling; on some of them, what is left of dolls
         bx(mb, x - 0.5, x + d.w + 0.5, y - 0.1, y + 0.1, -2.6, -1.8, ink());
         for (let hx = x; hx < x + d.w; hx += 1.1 + rng() * 0.6) { const l = 1.4 + rng() * 1.6; addBeam(mb, hx, y, hx, y - l, -2.2, 0.025, 0.025, ink()); addAnnulus(mb, hx, y - l - 0.08, -2.2, 0.05, 0.09, 8, 0.03, ink()); if (rng() < 0.5) { addSphere(mb, { x: hx, y: y - l - 0.45, z: -2.2, r: 0.17, sy: 1.6, segW: 7, segH: 5, colFn: () => ink() }); addSphere(mb, { x: hx, y: y - l - 0.05, z: -2.2, r: 0.12, segW: 6, segH: 4, colFn: () => ink() }); } }

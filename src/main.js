@@ -55,6 +55,12 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Theatre
+  eye: ['Something watches the stage. Do not stand in its light', 'Something watches the stage. Do not stand in its light'],
+  grubbed: [`A GRUB HAS YOUR STRINGS. Left is right, ${K('S')} jumps, ${K('SPACE')} creeps. A flame burns it off`, 'A GRUB HAS YOUR STRINGS. Left is right, down jumps, JUMP creeps. A flame burns it off'],
+  puppet: ['This door opens only for a puppet. Let it make you one, and walk onto the plate', 'This door opens only for a puppet. Let it make you one, and walk onto the plate'],
+  strings: [`Cut its strings: every lever at once, ${K('E')}`, 'Cut its strings: every lever at once, USE'],
+  strings1: [`Cut its strings: spool on the plate, hold the lever: ${K('E')}`, 'Cut its strings: spool on the plate, hold the lever: USE'],
   // the Larder
   boards: ['Something under the boards feels every step. Creep. Keep still when they creak', 'Something under the boards feels every step. Creep. Keep still when they creak'],
   sacks: [`In a sack, keep still and hold ${K('S')}: you are only a sack`, 'In a sack, keep still and pull the stick down: you are only a sack'],
@@ -127,7 +133,7 @@ async function boot() {
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;

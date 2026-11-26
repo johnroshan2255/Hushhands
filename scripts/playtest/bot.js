@@ -6,8 +6,11 @@
   const TB = window.__tb, G = TB.game;
   const held = new Set();
   const key = (type, code) => window.dispatchEvent(new KeyboardEvent(type, { code, key: code, bubbles: true }));
-  const hold = (c) => { if (!held.has(c)) { held.add(c); key('keydown', c); } };
-  const release = (c) => { if (held.has(c)) { held.delete(c); key('keyup', c); } };
+  // a grub swaps the controls: the bot presses what a person would press to get what it wants
+  const swapK = { KeyD: 'KeyA', KeyA: 'KeyD', Space: 'KeyS', KeyS: 'Space' };
+  const as = new Map();
+  const hold = (c) => { if (!held.has(c)) { held.add(c); const m = G.me && G.me.grub ? swapK[c] || c : c; as.set(c, m); key('keydown', m); } };
+  const release = (c) => { if (held.has(c)) { held.delete(c); key('keyup', as.get(c) || c); } };
   const releaseAll = () => { for (const c of [...held]) release(c); };
   const bot = (window.__bot = { log: [], sec: '', done: false, failed: '', deaths: 0, frames: 0 });
   const say = (m) => { bot.log.push(`[${G.T().toFixed(1)}s x=${G.me.b.x.toFixed(1)}] ${m}`); };
@@ -492,6 +495,36 @@
     say('the Glutton is dead');
     yield* toExit();
   };
+  // ---- the Theatre: the sweeping eye, the puppet door, the strings
+  const holes = () => L().kill.filter((k) => k.why === 'fell').map((k) => [k.x0, k.x1]);
+  const hopHoles = (dir) => dir > 0 && holes().some(([a]) => a - b().x > 0.4 && a - b().x < 0.75);
+  S['theatre:0'] = function* () {
+    const m = L().monsters[0], aim = () => m.x0 + (m.x1 - m.x0) * (0.5 - 0.5 * Math.cos((Math.PI * 2 * G.T()) / m.period));
+    const slow = () => Math.abs(Math.sin((Math.PI * 2 * G.T()) / m.period)) < 0.45;
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.7, { hop: hopHoles, stop: () => !G.me.grub && slow() && Math.abs(aim() - b().x) < 2.6 && Math.abs(aim() - b().x) > 0.9 });
+    if (G.me.grub) { yield* walkTo(37.2, { wait: false }); yield* until(() => !G.me.grub, 120, 'the grub burning'); yield* walkTo(L().cps[1].x + 0.6 - role() * 0.7); }
+  };
+  S['theatre:1'] = function* () {
+    yield* gather();
+    yield* walkTo(45.2, { wait: false, tol: 0.2 });
+    yield* until(() => G.me.grub, 60 * 4, 'the grub');
+    yield* walkTo(51 + role() * 0.25, { wait: false, hop: hopHoles, tol: 0.2 });
+    yield* until(() => W().open.pd, 60 * 6, 'the puppet door');
+    yield* walkTo(56.5, { wait: false, tol: 0.3 });
+    yield* until(() => !G.me.grub, 120, 'the grub burning');
+    yield* walkTo(L().cps[2].x + 0.6 - role() * 0.7, { wait: false });
+  };
+  S['theatre:2'] = function* () {
+    yield* gather();
+    if (solo()) { const P = L().plates.find((p) => p.id === 'strings'); yield* walkTo(P.x, { wait: false }); yield* setSpool(); yield* walkTo(L().levers[0].x, { wait: false }); }
+    else yield* walkTo(L().levers.filter((l) => l.id === 'strings')[N() - 1 - role()].x, { wait: false });
+    hold('KeyE');
+    yield* until(() => W().open.strings, 60 * 30, 'the strings cut');
+    release('KeyE');
+    say('the strings are cut');
+    if (solo()) yield* callSpool();
+    yield* toExit();
+  };
   S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }
@@ -544,6 +577,7 @@
       return;
     }
     if (bot.ridden) { bot.ridden = false; key('keyup', 'Space'); say('tore it out'); }
+    if (!!G.me.grub !== !!bot.grub) { bot.grub = !!G.me.grub; releaseAll(); say(bot.grub ? 'grubbed' : 'the grub is off'); }
     if (G.latchT > 0) {
       if (!bot.drunk) { bot.drunk = true; releaseAll(); say('a Drinker is on me'); }
       if (bot.frames % 6 === 0) key('keydown', 'Space'); else if (bot.frames % 6 === 3) key('keyup', 'Space');
