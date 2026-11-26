@@ -15,6 +15,7 @@ const KINDS = {
   mist: { mat: 'tint', col: [0.5, 0.02, 0.02, 0.55], size: [0.08, 0.2], grav: 1.5, life: [0.4, 0.9], spin: 0, speed: [0.4, 1.6], up: 0.5, grow: 2, round: true },
   stuff: { mat: 'world', col: [0.46, 0.13, 0.11, 0.06], size: [0.06, 0.13], grav: 6, life: [1.4, 2.6], spin: 3, speed: [0.6, 2.4], up: 1.8, round: true },
   wad: { mat: 'world', col: [0.42, 0.42, 0.39, 0.04], size: [0.06, 0.13], grav: 6, life: [1.4, 2.6], spin: 3, speed: [0.6, 2.4], up: 1.8, round: true },
+  spore: { mat: 'glow', col: [0.75, 0.82, 0.62, 0.5], size: [0.03, 0.07], grav: -0.5, life: [1.2, 2.6], spin: 0, speed: [0.2, 1.2], up: 0.4, round: true },
   drop: { mat: 'tint', col: [0.7, 0.78, 0.76, 0.6], size: [0.04, 0.09], grav: 14, life: [0.4, 0.8], spin: 0, speed: [1, 3.5], up: 3, round: true },
 };
 

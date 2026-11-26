@@ -55,6 +55,11 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Dye-Works
+  fumes: ['Fumes. Hold your breath, and do not stop', 'Fumes. Hold your breath, and do not stop'],
+  bloom: ['The pale things burst if you come near on foot. Jump clear over them', 'The pale things burst if you come near on foot. Jump clear over them'],
+  rotting: ['THE ROT IS IN YOU. Find clean water and stand in it. It is going down the thread', 'THE ROT IS IN YOU. Find clean water and stand in it. It is going down the thread'],
+  vats: ['Red below. Wait for the press to rise, then go', 'Red below. Wait for the press to rise, then go'],
   // the Granary
   lamp: [`Take the lamp: ${K('E')}. They will not cross its light`, 'Take the lamp: USE. They will not cross its light'],
   lampAll: [`Take the lamp: ${K('E')}. Keep inside its light, all of you`, 'Take the lamp: USE. Keep inside its light, all of you'],
@@ -117,7 +122,7 @@ async function boot() {
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;
@@ -151,6 +156,8 @@ async function boot() {
     },
     toast(text) { const t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4200); },
     end(s) { showEnd(s); },
+    /** how much of you is left to the rot (1 .. 0), a sick ring over the head */
+    rot(k, at) { const el = $('rotring'); if (k == null || !at) { el.hidden = true; return; } el.hidden = false; el.style.left = `${at[0]}px`; el.style.top = `${at[1] - 30}px`; el.style.setProperty('--b', k.toFixed(3)); },
     /** the breath left (0..1) in a ring over the doll's head; null hides it */
     breath(k, at) { const el = $('breath'); if (k == null || !at) { el.hidden = true; return; } el.hidden = false; el.style.left = `${at[0]}px`; el.style.top = `${at[1]}px`; el.style.setProperty('--b', k.toFixed(3)); el.classList.toggle('low', k < 0.3); },
     /** the card between chapters: the last one's lines, then the next one's name; then() starts it */

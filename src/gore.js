@@ -98,6 +98,10 @@ export class Gore {
         tear(1, 3); tear(1, 5); tear(2, 7); stuff(2, 14); stuff(1, 10); break;
       case 'moths': // holes until there is not enough left to stand
         tear(1, 3); tear(2, 9); stuff(1, 10); stuff(2, 8); break;
+      case 'dyed': // into the vat: it goes under, red
+        body.drown = { level: o.level ?? o.y + 1.5 }; spray(1, 20, [0, 1.2, 0], 1.2); break;
+      case 'fumes': // choked: it folds up where it stood
+        kick(0, -f * 1.5, -0.5); kick(1, -f, -1); stuff(1, 3); break;
       case 'cut': // the thread is cut: everyone drops where they stand
         kick(0, -f, 0.5); break;
       default: kick(0, -f * 1.2, 0.5); spray(1, 8); break;

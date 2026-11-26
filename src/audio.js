@@ -178,6 +178,7 @@ export class Sfx {
       case 'flutter': for (let i = 0; i < 6; i++) this.noise(d, { t: i * 0.05, dur: 0.05, f: 500 + R() * 400, q: 1.5, peak: 0.08 * v }); break;
       case 'clack': this.noise(d, { dur: 0.05, f: 2000, q: 4, peak: 0.4 }); this.sample(d, 'click', { vol: 0.4, rate: 0.6 }); break;
       case 'stitch': for (let i = 0; i < 3; i++) this.noise(d, { t: i * 0.12, dur: 0.07, f: 2600, q: 3, peak: 0.15 }); this.tone(d, { t: 0.3, dur: 0.6, f0: 520, f1: 780, type: 'sine', peak: 0.05 }); break;
+      case 'clang': this.sample(d, 'clang', { vol: 0.5 * v, rate: 0.7 }); break;
       case 'ping': this.tone(d, { dur: 0.35, f0: 880, f1: 880, type: 'sine', peak: 0.08 }); this.tone(d, { t: 0.08, dur: 0.4, f0: 1320, f1: 1320, type: 'sine', peak: 0.05 }); break;
       default: break;
     }

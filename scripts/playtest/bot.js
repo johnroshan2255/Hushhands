@@ -421,6 +421,37 @@
     yield* walkTo(L().cps[2].x + 0.6 - role() * 0.6, { wait: false });
   };
   S['granary:2'] = function* () { yield* toExit(); };
+  // ---- the Dye-Works: fumes, blooms, the rot, the vats
+  S['dyeworks:0'] = function* () {
+    const bl = L().blooms.filter((q) => q.x < 40);
+    const hop = (dir) => dir > 0 && bl.some((q, i) => !W().blooms[i] && q.x - b().x > 1.15 && q.x - b().x < 1.35);
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.8, { hop });
+  };
+  S['dyeworks:1'] = function* () {
+    yield* gather();
+    yield* walkTo(44.4, { wait: false });
+    yield* walkTo(53, { sneak: true, wait: false });
+    release('KeyS');
+    say(G.me.rot != null ? 'the rot is in me' : 'no rot?');
+    // to the clean water, in, and stand in it till it is gone
+    yield* walkTo(60.3, { wait: false });
+    hold('KeyD'); yield* until(() => b().swim || b().under, 120, 'into the basin'); release('KeyD');
+    yield* until(() => G.me.rot == null, 60 * 6, 'the rot washing off');
+    say('washed');
+    yield* swimTo(67.2, null, { out: true });
+    yield* walkTo(L().cps[2].x + 0.6 - role() * 0.8);
+  };
+  const pressPh = (p) => { const T = G.T(); return (((T + p.off) % p.period) + p.period) % p.period; };
+  S['dyeworks:2'] = function* () {
+    yield* gather();
+    const hop = (dir) => dir > 0 && b().x > 87.6 && b().x < 88.3;
+    for (const p of L().presses) {
+      yield* walkTo(p.x - 1.75 - role() * 0.3, { wait: false, hop });
+      yield* until(() => { const ph = pressPh(p); return ph > 0.12 + p.hold + 0.55 && ph < 0.12 + p.hold + 0.8; }, 60 * 8, 'the press rising');
+      yield* walkTo(p.x + 1.3, { wait: false, hop });
+    }
+    yield* toExit();
+  };
   S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }
