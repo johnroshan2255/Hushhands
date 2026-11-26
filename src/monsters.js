@@ -11,14 +11,20 @@
 import * as pc from 'playcanvas';
 import { addSphere, addLathe, addCylinder } from './meshes.js';
 import { mats, ent, sharedMesh, stickMesh, setStick, addBeam, ink } from './scene.js';
+import { newDrinker, thinkDrinker, packDrinker, unpackDrinker, DrinkerView } from './creatures/drinker.js';
+
+// creatures that live in their own files: kind -> { make, think, pack, unpack, View }
+export const KINDS = { drinker: { make: newDrinker, think: thinkDrinker, pack: packDrinker, unpack: unpackDrinker, View: DrinkerView } };
+export function viewFor(app, m) { return m.kind === 'crawler' ? new CrawlerView(app, m) : m.kind === 'collector' ? new CollectorView(app, m) : new KINDS[m.kind].View(app, m); }
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const R2D = 180 / Math.PI;
 
 // ------------------------------------------------------------------ minds (host only)
 export function newMonster(m) {
+  if (KINDS[m.kind]) return KINDS[m.kind].make(m);
   return m.kind === 'crawler'
-    ? { kind: 'crawler', id: m.id, x: m.x, x0: m.x0, x1: m.x1, y: m.y, mode: 'roam', dir: 1, tx: m.x, t: 0, home: m.x }
+    ? { kind: 'crawler', id: m.id, x: m.x, x0: m.x0, x1: m.x1, y: m.y, mode: 'roam', dir: 1, tx: m.x, t: 0, home: m.x, zone: m.zone }
     : { kind: 'collector', id: m.id, x: m.x, x0: m.x0, x1: m.x1, y: m.y, mode: 'pace', dir: -1, tx: m.x, t: 0, home: m.x, heard: 0, who: -1 };
 }
 
@@ -27,10 +33,11 @@ export function newMonster(m) {
  * returns events: [{ t: 'stab', x } | { t: 'grab', i } | { t: 'trip' } | { t: 'hear', id }]
  */
 export function thinkMonster(m, dt, bodies, L, ctx) {
+  if (KINDS[m.kind]) return KINDS[m.kind].think(m, dt, bodies, L, ctx);
   const ev = [];
   m.t += dt;
   if (m.kind === 'crawler') {
-    const Z = L.crawlZone;
+    const Z = m.zone;
     let loud = null;
     for (const b of bodies) {
       if (b.dead || !b.real || b.x < Z.x0 || b.x > Z.x1 || b.y < Z.y0 || b.y > Z.y1) continue;
@@ -79,8 +86,8 @@ export function thinkMonster(m, dt, bodies, L, ctx) {
 }
 /** a wanderer the Collector's hands meet and can lift: not the spool, not one holding fast */
 const loose = (b, m) => b.i >= 0 && !b.dead && !b.braced && Math.abs(b.x - m.x) < 1.1 && b.y < m.y + 2.2;
-export const packMonster = (m) => [Math.round(m.x * 100) / 100, m.mode, m.dir, Math.round(m.tx * 100) / 100, Math.round(m.t * 100) / 100];
-export function unpackMonster(m, a) { m.x = a[0]; if (m.mode !== a[1]) { m.mode = a[1]; m.t = a[4]; } m.dir = a[2]; m.tx = a[3]; }
+export const packMonster = (m) => KINDS[m.kind] ? KINDS[m.kind].pack(m) : [Math.round(m.x * 100) / 100, m.mode, m.dir, Math.round(m.tx * 100) / 100, Math.round(m.t * 100) / 100];
+export function unpackMonster(m, a) { if (KINDS[m.kind]) return KINDS[m.kind].unpack(m, a); m.x = a[0]; if (m.mode !== a[1]) { m.mode = a[1]; m.t = a[4]; } m.dir = a[2]; m.tx = a[3]; }
 
 // ------------------------------------------------------------------ bodies (everyone)
 export class CrawlerView {

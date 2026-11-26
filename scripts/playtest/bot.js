@@ -18,7 +18,7 @@
   const body = (i) => G.players[i]?.b;
   const behind = () => body(G.meIdx + 1); // the next one back along the thread
   const others = () => G.players.filter((p) => !p.me).map((p) => p.b);
-  const chk = () => { if (W().phase === 'dead' || b().dead || b().caged) throw new Error('dead'); };
+  const chk = () => { if (bot.Lsec && G.L !== bot.Lsec) throw new Error('moved'); if (W().phase === 'dead' || b().dead || b().caged) throw new Error('dead'); };
   function* frames(n) { for (let i = 0; i < n; i++) { chk(); yield; } }
   function* tap(c, n = 4) { hold(c); yield* frames(n); release(c); yield* frames(3); }
   function* until(fn, max = 60 * 40, what = '') { let i = 0; while (!fn()) { chk(); if (++i > max) throw new Error(`stuck waiting: ${what}`); yield; } }
@@ -41,6 +41,7 @@
       // (and landing past the target is arriving: walking back would be back onto what was hopped)
       if (hopping && jumpT <= 0 && b().ground) { hopping = false; if ((x - b().x) * hopDir < (o.tol || 0.15)) break; }
       if (Math.abs(b().x - x) <= (o.tol || 0.15) && !hopping) break;
+      if (o.done && o.done()) break;
       chk();
       if (++i > 60 * 50) throw new Error(`stuck walking to ${x.toFixed(1)}`);
       const dir = hopping ? hopDir : Math.sign(x - b().x);
@@ -84,7 +85,7 @@
       yield* until(() => { const p = pad(ci, k), dx = p.x - b().x; if (Math.abs(dx) > 0.2) { hold(dx > 0 ? 'KeyD' : 'KeyA'); release(dx > 0 ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); } return ready(p) || !b().ground; }, 900, 'riding');
       release('KeyA');
       yield* jumpRight(18);
-      yield* until(() => (b().ground && !b().mantle) || b().y < L().water.floor - 1, 200, 'jumping off the cog');
+      yield* until(() => (b().ground && !b().mantle) || b().y < L().waters[0].floor - 1, 200, 'jumping off the cog');
       if (landed()) { release('KeyD'); return; }
       say(`fell off cog ${ci}, again (y=${b().y.toFixed(2)} ground=${b().ground} on=${b().onId} vy=${b().vy.toFixed(1)})`);
     }
@@ -96,23 +97,25 @@
   const callSpool = function* () { if (G.spool.mode === 'follow') return; if (G.spool.mode !== 'return') yield* tap('KeyE', 5); yield* until(() => G.spool.mode === 'follow', 300, 'the spool coming back'); };
 
   // ------------------------------------------------------------------ the journey, lantern by lantern
-  const S = [];
-  S[0] = function* () { // the scrap pit: the plates
+  const S = {};
+  /** through the arch at the chapter's end, everyone side by side */
+  function* toExit() { const e = L().exit; if (!e) return; const Lnow = L(); yield* walkTo(e.x + 3.3 - role() * 0.75, { wait: false, tol: 0.25, done: () => L() !== Lnow || W().phase === 'leaving' }); }
+  S['pit:0'] = function* () { // the scrap pit: the plates
     const P = L().plates.filter((p) => p.id === 'g0');
     if (solo()) { yield* walkTo(P[0].x); yield* setSpool(); yield* walkTo(P[1].x); }
     else yield* walkTo(P[N() - 1 - role()].x, { wait: false });
     yield* until(() => W().open.g0, 60 * 40, 'the first gate');
     if (solo()) yield* callSpool();
     yield* frames(40);
-    yield* walkTo(L().cps[1].x + 1.2 - role() * 1.0);
+    yield* toExit();
   };
-  S[1] = function* () { // the meadow: traps, then the worm bed
+  S['meadow:0'] = function* () { // the meadow: traps, then the worm bed
     const traps = L().traps, lastTrap = traps[traps.length - 1].x;
     yield* walkTo(lastTrap + 2, { hop: (dir) => traps.some((t, i) => !W().traps[i] && (t.x - b().x) * dir > 0.75 && (t.x - b().x) * dir < 1.2) });
     yield* passWorms(L().worms.filter((w) => w.dir > 0));
-    yield* walkTo(L().cps[2].x + 0.8 - role() * 1.0);
+    yield* toExit();
   };
-  S[2] = function* () { // the chasm
+  S['chasm:0'] = function* () { // the chasm
     const jetty = L().solids.find((s) => s.thin && L().hooks[0] && Math.abs(s.x1 - 0.3 - L().hooks[0].x) < 0.01), tip = jetty.x1;
     const far = L().solids.find((s) => s.ground && Math.abs(s.x0 - (tip + 4.2)) < 0.01);
     const across = (q) => q.ground && q.x > far.x0 && Math.abs(q.y - far.y1) < 0.2;
@@ -177,14 +180,14 @@
       release('ShiftLeft');
     }
     say('across the chasm');
-    yield* walkTo(L().cps[3].x + 0.8 - role() * 1.0);
+    yield* walkTo(L().cps[1].x + 0.8 - role() * 1.0);
   };
-  S[3] = function* () { // the worm tunnel
+  S['chasm:1'] = function* () { // the worm tunnel
     yield* passWorms(L().worms.filter((w) => w.dir < 0));
-    yield* walkTo(L().cps[4].x + 0.5 - role() * 1.0);
+    yield* toExit();
   };
-  S[4] = function* () { // the den, then the levers
-    const Z = L().crawlZone, m = () => G.mon[0];
+  S['den:0'] = function* () { // the den, then the levers
+    const Z = L().monsters[0].zone, m = () => G.mon[0];
     const ledge = L().levers[0].x - 1.2;
     yield* walkTo(Z.x1 + 1.0, { sneak: true, stop: () => b().x > Z.x0 - 0.5 && b().x < Z.x1 && Math.abs(m().x - b().x) < 3.0 });
     release('KeyS');
@@ -198,10 +201,10 @@
     yield* until(() => W().open.g3, 60 * 40, 'the levers');
     release('KeyE');
     if (solo()) yield* callSpool();
-    yield* walkTo(L().cps[5].x + 0.6 - role() * 1.0);
+    yield* toExit();
   };
-  S[5] = function* () { // the gear room
-    const c0 = L().cogs[0], c1 = L().cogs[1], fl = L().water.floor;
+  S['gears:0'] = function* () { // the gear room
+    const c0 = L().cogs[0], c1 = L().cogs[1], fl = L().waters[0].floor;
     const block = L().solids.find((s) => Math.abs(s.y1 - (fl + 1.0)) < 0.01 && s.x0 > c0.x - 8 && s.x1 < c0.x);
     const slab = L().solids.find((s) => s.thin && s.x0 > c0.x && s.x1 < c1.x);
     const topS = L().solids.find((s) => s.ground && Math.abs(s.x0 - (c1.x + 3)) < 0.01);
@@ -215,14 +218,14 @@
     else yield* walkTo(P[N() - 1 - role()].x, { wait: false });
     yield* until(() => W().open.g4, 60 * 60, 'the gate at the top');
     if (solo()) yield* callSpool();
-    yield* walkTo(L().cps[6].x + 0.6 - role() * 1.0);
+    yield* toExit();
   };
-  S[6] = function* () { // the glass
-    const sl = L().slabs, at = (x) => sl.findIndex((s) => x > s.x0 - 0.15 && x < s.x1 + 0.15);
+  S['cathedral:0'] = function* () { // the glass
+    const sl = L().slabs, at = (x) => sl.findIndex((s) => x > s.x0 - 0.15 && x < s.x1 + 0.15), on = (k, x) => k >= 0 && x > sl[k].x0 - 0.45 && x < sl[k].x1 + 0.45;
     const cap = sl[0].cap;
-    yield* walkTo(L().cps[7].x + 0.6 - role() * 1.0, { stop: () => { const next = at(b().x + 0.5); if (next < 0 || next === at(b().x - 0.25)) return false; return others().filter((m) => at(m.x) === next).length >= cap; } });
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 1.0, { stop: () => { const next = at(b().x + 0.5); if (next < 0 || next === at(b().x - 0.25)) return false; return others().filter((m) => on(next, m.x)).length >= cap; } });
   };
-  S[7] = function* () { // the cathedral, then the shears
+  S['cathedral:1'] = function* () { // the cathedral, then the shears
     const bells = L().bells, sh = L().shears[0];
     const last = bells[bells.length - 1].x;
     while (b().x < last + 1.0) {
@@ -238,10 +241,10 @@
     yield* walkTo(sh.x + 2.6 - role() * 0.55, { wait: false });
     if (solo()) { yield* setSpool(); yield* callSpool(); }
     say('through the shears');
-    yield* walkTo(L().cps[8].x + 0.5 - role() * 1.0);
+    yield* toExit();
   };
-  S[8] = function* () { // the collector
-    const k = () => G.mon[1], x0 = L().monsters[1].x0;
+  S['collector:0'] = function* () { // the collector
+    const ki = L().monsters.findIndex((q) => q.kind === 'collector'), k = () => G.mon[ki], x0 = L().monsters[ki].x0;
     const A = x0 + 5, B = x0 + 10;
     // its hands lift anything loose: whenever they come near, stop and hold fast
     const near = () => Math.abs(k().x - b().x) < 3 && (k().mode === 'pace' || k().mode === 'hunt');
@@ -259,9 +262,41 @@
       release('ShiftLeft');
       if (solo()) yield* callSpool();
     }
-    yield* walkTo(L().cps[9].x + 0.5 - role() * 1.0);
+    yield* toExit();
   };
-  S[9] = function* () { // the spindle
+  // ---- the Fen: mud, candles, the bog
+  const dk = () => G.mon.filter((m) => m.kind === 'drinker');
+  const gone = (m) => m.mode === 'dead' || m.mode === 'burn';
+  function* creep(m) { yield* walkTo(m.x0 - 0.25, { wait: false }); yield* walkTo(m.x1 - 0.3, { sneak: true, wait: false }); release('KeyS'); }
+  const mudAt = (x0) => L().mud.find((m) => m.x0 >= x0);
+  /** show yourself to the Drinkers of this stretch, then run back past the candles; until none is left */
+  function* lure(back, inBeat) {
+    for (let k = 0; k < 10; k++) {
+      const alive = dk().filter(inBeat).filter((m) => !gone(m));
+      if (!alive.length) return;
+      const busy = () => alive.some((m) => m.mode === 'hunt' || m.mode === 'drink');
+      yield* walkTo(alive[0].x - 6.6, { wait: false, done: busy });
+      yield* until(busy, 240, 'a Drinker seeing me');
+      say('lured');
+      yield* walkTo(back, { wait: false });
+      yield* until(() => !busy(), 60 * 15, 'it burning');
+    }
+    throw new Error('the Drinkers would not burn');
+  }
+  const groundAt = (x) => L().solids.some((s) => (s.ground || s.stone) && x > s.x0 + 0.05 && x < s.x1 - 0.05 && Math.abs(s.y1 - b().y) < 0.12);
+  S['fen:0'] = function* () { yield* walkTo(25.5); yield* creep(mudAt(25)); yield* walkTo(L().cps[1].x + 0.8 - role() * 0.9); };
+  S['fen:1'] = function* () { yield* lure(52.3 - role() * 0.8, (m) => m.x0 === 52); yield* walkTo(L().cps[2].x + 0.8 - role() * 0.9); };
+  S['fen:2'] = function* () { yield* lure(71.2 - role() * 0.8, (m) => m.x0 === 72); yield* creep(mudAt(91)); yield* walkTo(L().cps[3].x + 0.6 - role() * 0.7, { wait: false }); };
+  S['fen:3'] = function* () {
+    const hop = (dir) => !groundAt(b().x + dir * 0.45) && b().ground;
+    yield* creep(mudAt(96.5));
+    yield* walkTo(110.6, { hop, wait: false });
+    yield* creep(mudAt(110));
+    yield* walkTo(127.5 - role() * 0.6, { hop, wait: false });
+    yield* walkTo(L().cps[4].x + 0.6 - role() * 0.9);
+  };
+  S['fen:4'] = function* () { for (const x of [131, 143, 153]) { yield* creep(mudAt(x - 0.5)); } yield* toExit(); };
+  S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }
     else yield* walkTo(R[N() - 1 - role()].x, { wait: false });
@@ -272,14 +307,23 @@
     for (;;) {
       if (W().phase === 'won') return;
       if (W().phase !== 'play') { yield; continue; }
-      const cp = W().cp;
-      bot.sec = L().cps[cp].name;
+      const cp = W().cp, Lnow = L(), sk = `${Lnow.id}:${cp}`;
+      bot.sec = `${Lnow.name} / ${Lnow.cps[cp].name}`;
       say(`> ${bot.sec}`);
-      try { yield* S[cp](); if (cp < 9) yield* until(() => W().cp > cp, 60 * 30, 'the next lantern'); yield; } catch (e) {
+      if (!S[sk]) { bot.failed = `no route for ${sk}`; return; }
+      bot.Lsec = Lnow;
+      try {
+        yield* S[sk]();
+        bot.Lsec = null;
+        if (cp < Lnow.cps.length - 1) yield* until(() => W().cp > cp, 60 * 30, 'the next lantern');
+        else if (Lnow.exit) { yield* until(() => G.L !== Lnow || W().phase === 'leaving', 60 * 30, 'the chapter ending'); yield* until(() => G.L !== Lnow && W().phase === 'play', 60 * 30, 'the next chapter'); }
+        yield;
+      } catch (e) {
         releaseAll();
-        if (e.message !== 'dead') { bot.failed = `${bot.sec}: ${e.message}`; say(`FAILED ${e.message}`); return; }
+        if (e.message === 'moved') { say('the chapter moved on without me'); continue; }
+        if (e.message !== 'dead') { bot.stack = e.stack; bot.failed = `${bot.sec}: ${e.message}`; say(`FAILED ${e.message}`); return; }
         bot.deaths++;
-        say(`died in ${bot.sec}: ${document.getElementById("toast")?.textContent || ""} (k at ${G.mon.find((m) => m.kind === "collector")?.x.toFixed(1)} ${G.mon.find((m) => m.kind === "collector")?.mode}; ${G.players.map((p) => `${p.b.x.toFixed(1)}${p.b.braced ? "B" : ""}${p.b.caged ? "C" : ""}`).join(" ")})`);
+        say(`died (${G.lastWhy}) in ${bot.sec}: ${document.getElementById("toast")?.textContent || ""} (k at ${G.mon.find((m) => m.kind === "collector")?.x.toFixed(1)} ${G.mon.find((m) => m.kind === "collector")?.mode}; ${G.players.map((p) => `${p.b.x.toFixed(1)}${p.b.braced ? "B" : ""}${p.b.caged ? "C" : ""}`).join(" ")})`);
         if (bot.deaths > (window.__botLives || 12)) { bot.failed = `${bot.sec}: died too often`; return; }
         while (W().phase !== 'play') yield;
         for (let i = 0; i < 50; i++) yield;
@@ -304,6 +348,12 @@
       return;
     }
     if (bot.ridden) { bot.ridden = false; key('keyup', 'Space'); say('tore it out'); }
+    if (G.latchT > 0) {
+      if (!bot.drunk) { bot.drunk = true; releaseAll(); say('a Drinker is on me'); }
+      if (bot.frames % 6 === 0) key('keydown', 'Space'); else if (bot.frames % 6 === 3) key('keyup', 'Space');
+      return;
+    }
+    if (bot.drunk) { bot.drunk = false; key('keyup', 'Space'); say('shook it off'); }
     try { const r = run.next(); if (r.done) { bot.done = !bot.failed; releaseAll(); } } catch (e) { bot.failed = `${bot.sec}: ${e.message}`; releaseAll(); }
   });
 })();

@@ -2,19 +2,22 @@
 // checks its own dangers; the host's browser also keeps the world: plates, levers, gates, the glass,
 // the bells, the water, the two hunters, checkpoints, death and the way back, and the ending.
 // Alone, you are the host and nothing goes over the wire.
-import { buildLevel, LINK, wormOut, wormWarn, shearsBeat, waterLevel } from './level.js';
+import { LINK, wormOut, wormWarn, shearsBeat, waterLevel } from './level.js';
+import { buildChapter, CHAPTERS } from './chapters/index.js';
 import { Space, newBody, stepPlayer, stepSpool, newSpool, linkLen, WAIST, HT, HT_LOW, GRAV } from './phys.js';
 import { Scene, mats, ent, halo, AMBER, sharedMesh, ink } from './scene.js';
 import { addLathe } from './meshes.js';
 import { glowMaterial } from './render.js';
 import { Threads, SpoolView } from './rope.js';
 import { Rig } from './chars.js';
-import { newMonster, thinkMonster, packMonster, unpackMonster, CrawlerView, CollectorView } from './monsters.js';
+import { newMonster, thinkMonster, packMonster, unpackMonster, viewFor } from './monsters.js';
+import { unlatch, DRAIN } from './creatures/drinker.js';
 import { FX } from './fx.js';
+import { Gore } from './gore.js';
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const NONE = { x: 0, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
-const F = { ground: 1, braced: 2, sneak: 4, right: 8, hang: 16, dead: 32, mantle: 64, use: 128, climb: 256, caged: 512, taut: 1024 };
+const F = { ground: 1, braced: 2, sneak: 4, right: 8, hang: 16, dead: 32, mantle: 64, use: 128, climb: 256, caged: 512, taut: 1024, dark: 2048 };
 const SCALE = 0.68; // a doll is small
 const RED = [1, 0.12, 0.08];
 let redMat = null;
@@ -29,6 +32,8 @@ export class Game {
   constructor({ app, R, sfx, input, net, hud, low = false }) {
     Object.assign(this, { app, R, sfx, input, net, hud, low });
     this.fx = new FX(app);
+    this.gore = new Gore(app, { low });
+    this.goreMode = 'full';
     this.running = false;
     this.attract = false;
     this.paused = false;
@@ -47,13 +52,16 @@ export class Game {
 
   // ------------------------------------------------------------------ setting out
   /** order: [{ id, name, slot }] along the thread; startedAt: server ms (online) or null */
-  start({ order, meId, startedAt = null, cp = 0, open = {}, tripped = false, deaths = 0, cut = 0, attract = false, runT0 = null }) {
+  start({ order, meId, startedAt = null, chapter = 0, cp = 0, open = {}, tripped = false, deaths = 0, cut = 0, attract = false, runT0 = null, found = [] }) {
     this.stop();
     const app = this.app, n = order.length;
     this.n = n;
-    this.L = buildLevel(n);
+    this.ci = Math.max(0, Math.min(CHAPTERS.length - 1, chapter | 0));
+    this.L = buildChapter(this.ci, n);
+    this.order = order;
     const L = this.L;
     this.space = new Space(L);
+    this.gore.clear(); this.gore.setting = this.goreMode;
     this.scene = new Scene(app, L, { low: this.low });
     this.threads = new Threads(app, Math.max(1, n - 1));
     this.startedAt = startedAt;
@@ -73,28 +81,37 @@ export class Game {
     });
     // the dread: how afraid this screen should be right now, and what keeps it company
     this.dreadK = 0; this.beatT = 0; this.ambT = 6 + R01() * 6; this.eyesT = 10 + R01() * 8; this.blackT = 0; this.watchers = [];
-    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.lungeCd = 0; this.wormSafe = 0; this.jerkT = 0; this.jerkDir = 0; this.squirmT = 0;
+    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.lungeCd = 0; this.wormSafe = 0; this.latchT = 0; this.shookT = 0; this.jerkT = 0; this.jerkDir = 0; this.squirmT = 0;
     this.spool = n === 1 ? newSpool(0, 0) : null;
     this.spoolView = this.spool ? new SpoolView(app) : null;
-    this.W = { open: { ...open }, plates: [], levers: [], traps: [], slabs: [], wake: 0, scream: false, waterT0: null, water: L.water.y0, cp, rings: [], won: 0, phase: 'play', deaths, cut, epoch: 0, tripped, bell: {} };
-    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {} };
+    this.W = { open: { ...open }, plates: [], levers: [], traps: [], slabs: [], wake: 0, scream: false, wT0: {}, wl: L.waters.map((w) => w.y0), cp: Math.min(cp, L.cps.length - 1), rings: [], won: 0, phase: 'play', deaths, cut, epoch: 0, tripped, bell: {}, found: [...found], exitT: 0 };
+    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {} };
     this.mon = L.monsters.map(newMonster);
-    this.monViews = L.monsters.map((m) => (m.kind === 'crawler' ? new CrawlerView(app, m) : new CollectorView(app, m)));
+    this.monViews = L.monsters.map((m) => viewFor(app, m));
     if (tripped) for (const m of this.mon) if (m.kind === 'collector') m.mode = 'down';
+    cp = this.W.cp;
     this.beats = L.shears.map(() => null);
     this.bellAt = {}; this.bellMine = {};
     this.wormWas = L.worms.map(() => 0);
     this.dying = false; this.deadT = 0; this.wonT = 0; this.sendT = 0; this.noiseOut = 0; this.hintKey = null; this.useLabel = null; this.caught = -1;
-    this.runT0 = runT0; this.cutT = 0; this.ended = false; this.result = null;
+    this.runT0 = runT0; this.cutT = 0; this.ended = false; this.result = null; this.leaving = false;
     this.place(cp);
     const c = L.cps[cp];
     this.cam.x = c.x + (attract ? 3.6 : 1.5); this.cam.y = c.y + 2.7; this.cam.h = attract ? 7.4 : 8.6;
     this.running = true;
     this.hud.fade(1, 0); this.hud.fade(0, 1.4);
-    if (!attract) this.hud.card(c.name, cp === 0 ? (n === 1 ? 'alone, with your spool' : `${n} bound by one thread`) : '');
+    if (!attract) this.hud.card(c.name, cp === 0 ? this.chapterLine() : '');
+    if (!attract) this.saveNow();
   }
+  chapterLine() { const L = this.L; return `chapter ${L.num}  ·  ${this.n === 1 ? 'alone, with your spool' : `${this.n} bound by one thread`}`; }
   /** leave the title screen and take the first step (alone) */
-  begin() { this.attract = false; this.runT0 = this.T(); this.hud.card(this.L.cps[0].name, 'alone, with your spool'); }
+  begin() { this.attract = false; this.runT0 = this.T(); this.hud.card(this.L.cps[0].name, this.chapterLine()); this.saveNow(); }
+  /** where the journey stands, for the save slot (main.js decides where it goes) */
+  saveNow() {
+    if (this.attract || !this.W || !this.onSave) return;
+    const W = this.W;
+    this.onSave({ chapter: this.L.id, ci: this.ci, lantern: W.cp, deaths: W.deaths, cuts: W.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: W.found });
+  }
   stop() {
     if (!this.running && !this.scene) return;
     this.running = false;
@@ -134,7 +151,7 @@ export class Game {
     p.net = { x: m.x, y: m.y, vx: m.vx, vy: m.vy, t: performance.now() };
     b.vx = m.vx; b.vy = m.vy; b.ground = !!(f & F.ground); b.braced = !!(f & F.braced); b.sneak = !!(f & F.sneak); b.facing = f & F.right ? 1 : -1;
     b.hang = !!(f & F.hang); b.mantling = !!(f & F.mantle); b.climbing = f & F.climb ? 1 : 0; b.taut = !!(f & F.taut); b.reel = m.r || 0; b.reelTo = m.rt ?? null;
-    p.use = !!(f & F.use); p.noise = m.n || 0;
+    p.use = !!(f & F.use); p.noise = m.n || 0; p.dark = !!(f & F.dark);
     if (Math.hypot(b.x - m.x, b.y - m.y) > 4) { b.x = m.x; b.y = m.y; }
   }
   sendMe(dt) {
@@ -143,7 +160,7 @@ export class Game {
     this.noiseOut = Math.max(this.noiseOut, b.noise);
     if (this.sendT > 0 || !this.net.online) return;
     this.sendT = 0.05;
-    const f = (b.ground ? F.ground : 0) | (b.braced ? F.braced : 0) | (b.sneak ? F.sneak : 0) | (b.facing > 0 ? F.right : 0) | (b.hang ? F.hang : 0) | (b.mantle ? F.mantle : 0) | (this.me.use ? F.use : 0) | (b.climbing ? F.climb : 0) | (b.taut ? F.taut : 0);
+    const f = (b.ground ? F.ground : 0) | (b.braced ? F.braced : 0) | (b.sneak ? F.sneak : 0) | (b.facing > 0 ? F.right : 0) | (b.hang ? F.hang : 0) | (b.mantle ? F.mantle : 0) | (this.me.use ? F.use : 0) | (b.climbing ? F.climb : 0) | (b.taut ? F.taut : 0) | (b.dark > 0 ? F.dark : 0);
     const r2 = (v) => Math.round(v * 100) / 100;
     this.send('p', { x: r2(b.x), y: r2(b.y), vx: r2(b.vx), vy: r2(b.vy), f, r: r2(b.reel), rt: b.reelTo, n: r2(this.noiseOut) });
     this.noiseOut = 0;
@@ -153,7 +170,7 @@ export class Game {
     if (m.ep !== W.epoch) return;
     for (const id of m.o) W.open[id] = true;
     W.plates = unbits(m.pl, L.plates.length); W.levers = unbits(m.lv, L.levers.length); W.traps = unbits(m.tr, L.traps.length); W.rings = unbits(m.rg, L.rings.length);
-    W.slabs = m.sl; W.wake = m.wk; W.waterT0 = m.w0; W.cp = Math.max(W.cp, m.cp); W.deaths = m.d;
+    W.slabs = m.sl; W.wake = m.wk; W.wT0 = m.w0 || {}; W.cp = Math.max(W.cp, m.cp); W.deaths = m.d;
     m.m.forEach((a, i) => { if (this.mon[i]) unpackMonster(this.mon[i], a); });
   }
   /** someone left: those who remain go on from the last lantern, with a thread cut for their number */
@@ -161,7 +178,7 @@ export class Game {
     if (!this.running || !this.isHost || this.attract) return;
     const order = this.players.filter((p) => p.id !== id).map((p) => ({ id: p.id, name: p.name, slot: p.slot }));
     if (order.length === this.players.length) return;
-    this.emit({ t: 'regroup', order, cp: this.W.cp, open: this.W.open, tripped: this.W.tripped, deaths: this.W.deaths, cut: this.W.cut, runT0: this.runT0 });
+    this.emit({ t: 'regroup', order, chapter: this.ci, cp: this.W.cp, open: this.W.open, tripped: this.W.tripped, deaths: this.W.deaths, cut: this.W.cut, runT0: this.runT0, found: this.W.found });
   }
 
   // ------------------------------------------------------------------ what the host decides
@@ -184,6 +201,12 @@ export class Game {
       if (!H.wormed[i.k]) return;
       H.wormed[i.k] = false;
       this.emit({ t: 'possess', who: i.k, on: false, how: 'ripped', by: from });
+    } else if (i.t === 'shake' || i.t === 'pull') { // a Drinker shaken off (by its victim) or pulled off (by a friend)
+      const who = i.t === 'shake' ? from : i.k, mi = H.latched[who];
+      if (mi == null) return;
+      delete H.latched[who];
+      unlatch(this.mon[mi]);
+      this.emit({ t: 'unlatch', mi, who, by: i.t === 'pull' ? from : -1 });
     } else if (i.t === 'lunge') {
       if (H.wormed[from]) this.emit({ t: 'lunge', who: from });
     } else if (i.t === 'bell') {
@@ -199,7 +222,7 @@ export class Game {
     if (W.phase !== 'play') return;
     W.deaths++;
     if (why === 'cut') W.cut++;
-    this.host.wormed = {};
+    this.host.wormed = {}; this.host.latched = {};
     this.host.respawnAt = this.T() + (why === 'caged' ? 2.6 : 2.0);
     this.emit({ t: 'die', who, why, x, y, k, d: W.deaths });
   }
@@ -215,8 +238,8 @@ export class Game {
     }
     if (W.phase !== 'play') return;
     // everyone who can weigh something down, or be heard
-    const bodies = this.players.map((p, i) => ({ i, x: p.b.x, y: p.b.y, vx: p.b.vx, noise: p.me ? p.b.noise : p.noise, sneak: p.b.sneak, braced: p.b.braced, ground: p.b.ground, dead: p.b.dead, anchor: p.b.braced && p.b.ground, use: p.use, real: true }));
-    if (this.spool) bodies.push({ i: -1, x: this.spool.x, y: this.spool.y, vx: 0, noise: 0, sneak: true, braced: this.spool.mode === 'planted', ground: this.spool.ground || this.spool.mode === 'planted', dead: false, anchor: this.spool.mode === 'planted', use: false, real: false, flying: this.spool.mode === 'return' || this.spool.mode === 'hooked' });
+    const bodies = this.players.map((p, i) => ({ i, x: p.b.x, y: p.b.y, vx: p.b.vx, noise: p.me ? p.b.noise : p.noise, sneak: p.b.sneak, braced: p.b.braced, ground: p.b.ground, dead: p.b.dead, anchor: p.b.braced && p.b.ground, use: p.use, real: true, lit: !(p.me ? p.b.dark > 0 : p.dark) && !p.hid }));
+    if (this.spool) bodies.push({ i: -1, x: this.spool.x, y: this.spool.y, vx: 0, noise: 0, sneak: true, braced: this.spool.mode === 'planted', ground: this.spool.ground || this.spool.mode === 'planted', dead: false, anchor: this.spool.mode === 'planted', use: false, real: false, flying: this.spool.mode === 'return' || this.spool.mode === 'hooked', lit: !(this.spool.dark > 0) });
     const on = (x, y, hw) => bodies.some((b) => !b.dead && !b.flying && b.ground && Math.abs(b.x - x) < hw && Math.abs(b.y - y) < 0.3);
     // plates, levers, gates
     L.plates.forEach((p, i) => { const v = on(p.x, p.y, p.w / 2 + 0.12); if (v !== !!W.plates[i]) { W.plates[i] = v; this.emit({ t: 'plate', k: i, on: v }); } });
@@ -231,7 +254,12 @@ export class Game {
     const next = L.cps[W.cp + 1];
     if (next && bodies.some((b) => b.real && !b.dead && b.x >= next.x - 0.6 && Math.abs(b.y - next.y) < 3)) { W.cp++; this.emit({ t: 'cp', k: W.cp }); }
     // the water comes in once someone is well inside
-    if (W.waterT0 == null && bodies.some((b) => b.real && b.x > L.water.trigger && b.x < L.water.x1 && b.y < L.water.floor + 7)) { W.waterT0 = T; this.emit({ t: 'flood' }); }
+    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && b.y < w.floor + 7)) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); }
+    // the way on: everyone still standing through the arch
+    if (L.exit && !this.ended) {
+      const live = bodies.filter((b) => b.real && !b.dead);
+      if (live.length && live.every((b) => b.x >= L.exit.x - 0.3)) { H.exitT += dt; if (H.exitT > 0.6) { W.phase = 'leaving'; (window.__trace ||= []).push(`exit ${L.id} T=${T.toFixed(1)} ${live.map((b) => b.x.toFixed(1)).join(',')} ex=${L.exit.x}`); this.emit({ t: 'chapter', ci: this.ci + 1, d: W.deaths, cut: W.cut, found: W.found }); } } else H.exitT = 0;
+    }
     // glass: too many on one slab and it goes
     L.slabs.forEach((s, i) => {
       const st = W.slabs[i] || 0;
@@ -254,18 +282,21 @@ export class Game {
         if (e.t === 'stab') this.emit({ t: 'stab', x: e.x, mi });
         else if (e.t === 'grab') { if (e.i >= 0) { const p = this.players[e.i]; this.kill(e.i, 'caged', p.b.x, p.b.y, mi); } }
         else if (e.t === 'trip') this.emit({ t: 'trip', mi, x: e.x });
-        else if (e.t === 'crash') { W.tripped = true; W.open.g7 = true; this.emit({ t: 'crash', mi, x: e.x }); this.emit({ t: 'gate', id: 'g7' }); }
+        else if (e.t === 'crash') { W.tripped = true; const g = L.monsters[mi].gate; if (g) W.open[g] = true; this.emit({ t: 'crash', mi, x: e.x }); if (g) this.emit({ t: 'gate', id: g }); }
         else if (e.t === 'hear') this.emit({ t: 'hear', mi });
+        else if (e.t === 'latch') { H.latched[e.i] = mi; this.emit({ t: 'latch', mi, who: e.i }); }
+        else if (e.t === 'drained') { delete H.latched[e.i]; const p = this.players[e.i]; if (p) this.kill(e.i, 'drained', p.b.x, p.b.y, mi); }
+        else if (e.t === 'burn' || e.t === 'ash') this.emit({ t: e.t, mi, x: e.x, y: e.y });
       }
     });
     // the spindle: every ring stood in at once
     L.rings.forEach((r, i) => { W.rings[i] = on(r.x, r.y, 0.8); });
-    if (L.rings.every((r, i) => W.rings[i])) { H.ringT += dt; if (H.ringT > 1.1) { W.phase = 'won'; this.emit({ t: 'win', time: T - (this.runT0 ?? 0), d: W.deaths, cut: W.cut }); } } else H.ringT = 0;
+    if (L.rings.length && L.rings.every((r, i) => W.rings[i])) { H.ringT += dt; if (H.ringT > 1.1) { W.phase = 'won'; this.emit({ t: 'win', time: T - (this.runT0 ?? 0), d: W.deaths, cut: W.cut }); } } else H.ringT = 0;
     // tell the others how the world stands
     H.snapT -= dt;
     if (H.snapT <= 0 && this.net.online) {
       H.snapT = 0.1;
-      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.waterT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster) });
+      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster) });
     }
   }
 
@@ -276,8 +307,8 @@ export class Game {
       case 'plate': W.plates[e.k] = e.on; sfx.play(e.on ? 'plate' : 'plateUp', { x: L.plates[e.k].x }); break;
       case 'lever': W.levers[e.k] = e.on; sfx.play('lever', { x: L.levers[e.k].x }); break;
       case 'gate': { W.open[e.id] = true; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.burst('dust', g.x + 0.35, g.y + 0.2, 0.5, 10, { spread: 1.2 }); fx.shake(0.35); } break; }
-      case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } break;
-      case 'flood': W.waterT0 = W.waterT0 ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
+      case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
+      case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
       case 'crack': W.slabs[e.k] = 1; sfx.play('crackle', { x: L.slabs[e.k].x0 + 1.3 }); break;
       case 'shatter': { W.slabs[e.k] = 2; const s = L.slabs[e.k]; sfx.play('glass', { x: s.x0 + 1.3 }); for (let x = s.x0 + 0.3; x < s.x1; x += 0.6) fx.burst('glass', x, s.y - 0.1, 0, 5, { spread: 0.7 }); break; }
       case 'bell': { this.bellAt[e.k] = this.T(); const b = L.bells[e.k]; sfx.play(b.kind === 'hang' ? 'bell' : 'tinybell', { x: b.x }); W.wake = Math.max(W.wake, 0.6); break; }
@@ -304,43 +335,68 @@ export class Game {
         }
         break;
       }
+      case 'latch': { const p = this.players[e.who]; if (!p) break; p.latched = e.mi; sfx.play('slurp', { x: p.b.x }); fx.burst('dye', p.b.x, p.b.y + 0.9, 0.3, 6, { power: 0.6 }); if (p.me) { this.latchT = 0.001; this.shakeOut = 0; fx.shake(0.6); this.hud.flash('#5a0000', 0.5, 160); } break; }
+      case 'unlatch': { const p = this.players[e.who]; if (!p) break; p.latched = null; sfx.play('rip', { x: p.b.x }); if (p.me) { this.latchT = 0; this.shakeOut = 0; this.wormSafe = 1.2; } if (e.by >= 0) { const by = this.players[e.by]; this.hud.toast(`${by ? by.name : 'Someone'} tore the Drinker off ${p.name}.`); } break; }
+      case 'burn': sfx.play('burst', { x: e.x }); sfx.play('flame', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 24, { power: 1.4 }); fx.burst('ink', e.x, e.y, 0.3, 14, { power: 1.2 }); if (this.mon[e.mi]?.full > 0.2) fx.burst('dye', e.x, e.y, 0.3, 12); fx.shake(0.35); break;
+      case 'ash': fx.burst('dust', e.x, e.y, 0.3, 8, { spread: 1 }); break;
       case 'lunge': { const p = this.players[e.who]; if (p) { p.lungeT = 0.01; sfx.play('lunge', { x: p.b.x }); } break; }
       case 'trip': sfx.play('groan', { x: e.x }); sfx.play('twang', { x: e.x, vol: 2 }); break;
-      case 'crash': W.tripped = true; W.open.g7 = true; sfx.play('crash', { x: e.x }); fx.shake(1); for (let i = 0; i < 6; i++) fx.burst('dust', e.x - 3 + i * 1.2, this.mon[e.mi].y + 0.3, 0.6, 6, { spread: 1.4 }); break;
+      case 'crash': W.tripped = true; { const g = L.monsters[e.mi]?.gate; if (g) W.open[g] = true; } sfx.play('crash', { x: e.x }); fx.shake(1); for (let i = 0; i < 6; i++) fx.burst('dust', e.x - 3 + i * 1.2, this.mon[e.mi].y + 0.3, 0.6, 6, { spread: 1.4 }); break;
       case 'die': this.onDie(e); break;
       case 'respawn': this.onRespawn(e); break;
       case 'win': W.phase = 'won'; this.wonT = 0; this.result = e; sfx.play('win'); break;
-      case 'regroup': if (!this.isHost || e.order.length !== this.players.length) this.start({ order: e.order, meId: this.net.id, startedAt: this.startedAt, cp: e.cp, open: e.open, tripped: e.tripped, deaths: e.deaths, cut: e.cut, runT0: e.runT0 }); this.hud.toast(e.order.length === 1 ? 'You go on alone, with a spool.' : 'One of you is gone. The thread is retied.'); break;
+      case 'chapter': this.onChapter(e); break;
+      case 'regroup': if (!this.isHost || e.order.length !== this.players.length) this.start({ order: e.order, meId: this.net.id, startedAt: this.startedAt, chapter: e.chapter, cp: e.cp, open: e.open, tripped: e.tripped, deaths: e.deaths, cut: e.cut, runT0: e.runT0, found: e.found }); this.hud.toast(e.order.length === 1 ? 'You go on alone, with a spool.' : 'One of you is gone. The thread is retied.'); break;
       default: break;
     }
   }
+  /** everyone walked through the arch: the card between chapters, then the next chapter, built for us */
+  onChapter(e) {
+    if (this.leaving) return;
+    this.leaving = true;
+    this.W.phase = 'leaving';
+    const next = e.ci, C = CHAPTERS[next];
+    this.sfx.play('chime');
+    this.hud.fade(1, 1.2);
+    this.hud.hint(null); this.hud.use(null);
+    if (!C) return;
+    const keep = { order: this.order, meId: this.net.online ? this.net.id : this.order[this.meIdx].id, startedAt: this.startedAt, chapter: next, deaths: e.d ?? this.W.deaths, cut: e.cut ?? this.W.cut, runT0: this.runT0, found: e.found || this.W.found };
+    this.onSave?.({ chapter: C.id, ci: next, lantern: 0, deaths: keep.deaths, cuts: keep.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: keep.found });
+    const was = this.L.card || CHAPTERS[this.ci].card;
+    this.hud.between({ num: C.num, name: C.name, lines: was }, () => { if (this.running && this.leaving) { this.leaving = false; this.start(keep); } });
+  }
   die(why, k) { if (this.dying || this.W.phase !== 'play' || this.attract) return; this.dying = true; this.intent({ t: 'die', why, k }); }
   onDie(e) {
-    const W = this.W, sfx = this.sfx, fx = this.fx;
+    const W = this.W, sfx = this.sfx, fx = this.fx, L = this.L;
     if (W.phase !== 'play') return;
-    W.phase = 'dead'; W.deaths = e.d; this.deadT = 0; this.dying = true;
+    W.phase = 'dead'; W.deaths = e.d; this.deadT = 0; this.dying = true; this.lastWhy = e.why;
     const victims = e.who < 0 ? this.players : [this.players[e.who]].filter(Boolean);
     for (const p of victims) {
       const b = p.b;
       b.dead = true; b.braced = false; b.hang = false; b.mantle = null;
       const x = b.x, y = b.y;
       switch (e.why) {
-        case 'fell': p.fall = true; break;
-        case 'worm': p.hid = true; fx.burst('ink', x, y + 0.5, 0, 12, { power: 0.8 }); sfx.play('crunch', { x }); break;
-        case 'trap': if (e.k != null) W.traps[e.k] = true; sfx.play('trap', { x }); fx.burst('ink', x, y + 0.3, 0, 8, { power: 0.7 }); fx.burst('spark', x, y + 0.2, 0, 6); break;
-        case 'crawler': fx.burst('ink', x, y + 0.5, 0, 10, { power: 0.8 }); break;
+        case 'worm': sfx.play('crunch', { x }); break;
+        case 'trap': if (e.k != null) W.traps[e.k] = true; sfx.play('trap', { x }); fx.burst('spark', x, y + 0.2, 0, 6); break;
         case 'caged': b.dead = false; b.caged = true; this.caught = p.i; this.caughtBy = e.k ?? 0; sfx.play('grunt', { x }); break;
-        case 'water': sfx.play('splash', { x }); fx.burst('drop', x, y + 1, 0.5, 10); break;
-        case 'shears': p.hid = true; sfx.play('snip', { x }); fx.burst('ink', x, y + 0.6, 0, 16, { power: 1.1 }); break;
-        case 'possessed': sfx.play('stab', { x }); sfx.play('crunch', { x }); fx.burst('ink', x, y + 0.6, 0, 20, { power: 1.2 }); break;
-        case 'taken': sfx.play('taken', { x }); fx.burst('ink', x, y + 1.0, 0.3, 22, { power: 1.3, dir: [0, 1.4, 0] }); break;
+        case 'water': sfx.play('splash', { x }); break;
+        case 'shears': sfx.play('snip', { x }); break;
+        case 'possessed': sfx.play('stab', { x }); sfx.play('crunch', { x }); break;
+        case 'taken': sfx.play('taken', { x }); break;
         default: break;
+      }
+      // the doll stops being a doll: a body, where it fell, for the rest of the chapter
+      if (e.why !== 'caged' && e.why !== 'retry' && !p.hid) {
+        const wi = L.waters.findIndex((w) => x > w.x0 && x < w.x1 && W.wl[w.i] > y);
+        this.gore.spawn({ x, y, facing: b.facing, vx: b.vx, vy: b.vy, variant: p.slot, why: e.why === 'worm' ? 'taken' : e.why, solids: L.solids, open: (s) => this.space.open(s), fx, level: wi >= 0 ? W.wl[wi] : null });
+        p.hid = true;
+        if (e.why === 'fell' || e.why === 'water') { /* the body goes on, the camera stays */ }
       }
       b.vx = 0; if (!p.fall) b.vy = 0;
     }
     if (e.why === 'possessed') { const k = this.players[e.k], v = victims[0]; if (k && v) this.hud.toast(`The worm in ${k.name} killed ${v.name}.`); }
-    for (const p of this.players) { p.wormed = false; p.lungeT = 0; }
-    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0;
+    for (const p of this.players) { p.wormed = false; p.lungeT = 0; p.latched = null; }
+    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.latchT = 0;
     this.hud.flash('#4a0000', 0.55, 180);
     sfx.play('sting', { x: victims[0]?.b.x });
     if (e.why === 'cut') { sfx.play('snip', { x: e.x }); fx.burst('ember', e.x, e.y, 0.3, 26, { power: 1.6 }); this.cutT = 0.01; }
@@ -352,10 +408,11 @@ export class Game {
   }
   onRespawn(e) {
     const W = this.W;
-    W.epoch = e.ep; W.cp = e.cp; W.phase = 'play'; W.traps = []; W.slabs = []; W.wake = 0; W.scream = false; W.waterT0 = null; W.plates = []; W.levers = []; W.rings = [];
+    W.epoch = e.ep; W.cp = e.cp; W.phase = 'play'; W.traps = []; W.slabs = []; W.wake = 0; W.scream = false; W.wT0 = {}; W.plates = []; W.levers = []; W.rings = [];
     this.bellAt = {}; this.bellMine = {}; this.dying = false; this.cutT = 0;
-    for (const p of this.players) { p.wormed = false; p.lungeT = 0; }
-    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.wormSafe = 1;
+    for (const p of this.players) { p.wormed = false; p.lungeT = 0; p.latched = null; p.b.dark = 0; }
+    this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.wormSafe = 1; this.latchT = 0;
+    if (this.spool) this.spool.dark = 0;
     if (!this.isHost) this.mon = this.L.monsters.map((m, i) => (m.kind === 'collector' && W.tripped ? this.mon[i] : newMonster(m)));
     this.place(e.cp);
     const c = this.L.cps[e.cp];
@@ -376,7 +433,7 @@ export class Game {
     const me = this.me, b = me.b;
     if (live) {
       for (const s of L.slabs) s.broken = (W.slabs[s.i] || 0) === 2;
-      W.water = waterLevel(L.water, W.waterT0, T);
+      L.waters.forEach((w, i) => { W.wl[i] = waterLevel(w, W.wT0[w.id], T); });
       space.begin(T, W.open, this.bridges());
       // ---- me
       const can = W.phase === 'play' && !this.attract && !this.paused && (this.startedAt == null || T > 0);
@@ -384,11 +441,13 @@ export class Game {
       let inp = can ? { x: input.dirX, y: input.dirY, jump: input.tap('jump') || (!hanging && input.tap('up') && !this.input.touch.y), jumpHeld: input.held('jump') || input.held('up'), brace: input.held('brace'), sneak: input.dirY < 0 } : NONE;
       this.wormSafe = Math.max(0, this.wormSafe - dt);
       if (can && this.wormT > 0 && !b.dead) inp = this.ridden(dt, T) || inp;
+      if (can && this.latchT > 0 && !b.dead) inp = this.drunk(dt);
       // close to a friend with a worm in them: USE tears it out
-      if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); }
+      if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); else { const g = this.players.find((p) => !p.me && p.latched != null && !p.b.dead && Math.abs(p.b.x - b.x) < 1.4 && Math.abs(p.b.y - b.y) < 1.5); if (g) this.intent({ t: 'pull', k: g.i }); } }
       const links = W.phase === 'play' ? this.linksFor(this.meIdx) : [];
       if (b.dead || b.caged) this.deadBody(me, dt);
       else stepPlayer(b, inp, dt, space, links);
+      this.mud(b, dt);
       if (this.spool) this.stepSpoolAll(dt, can);
       me.use = can && input.held('use') && this.nearLever(b) >= 0;
       // ---- the others, eased toward where they say they are
@@ -491,6 +550,24 @@ export class Game {
     return { x, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
   }
 
+  /** a Drinker is on me: I can't move; I hammer JUMP to shake it (a friend can tear it off) */
+  drunk(dt) {
+    const b = this.me.b, input = this.input;
+    this.latchT += dt;
+    if (input.tap('jump') || (input.touch && input.tap('up'))) { this.shakeOut += 0.14; this.sfx.play('squirm', { x: b.x, vol: 1 }); this.fx.shake(0.2); this.fx.burst('dye', b.x, b.y + 0.8, 0.3, 2, { power: 0.5 }); }
+    this.shakeOut = Math.max(0, this.shakeOut - 0.15 * dt);
+    if (this.shakeOut >= 1 && !this.shookT) { this.shookT = 0.5; this.intent({ t: 'shake' }); }
+    this.shookT = Math.max(0, (this.shookT || 0) - dt);
+    if ((this.slurpT = (this.slurpT || 0) - dt) <= 0) { this.slurpT = 0.9; this.sfx.play('slurp', { x: b.x, vol: 0.7 }); }
+    return NONE;
+  }
+  /** creeping through mud smothers the thread's glow (and the spool's, if it is with you) for a while */
+  mud(b, dt) {
+    const inMud = b.sneak && b.ground && !b.dead && this.L.mud.some((m) => b.x > m.x0 && b.x < m.x1 && Math.abs(b.y - m.y) < 0.35);
+    if (inMud) { if (!(b.dark > 1)) { this.sfx.play('squelch', { x: b.x }); this.fx.burst('dust', b.x, b.y + 0.2, 0.3, 4, { power: 0.5 }); } b.dark = 6; }
+    else b.dark = Math.max(0, (b.dark || 0) - dt);
+    if (this.spool) { if (inMud && this.spool.mode === 'follow') this.spool.dark = 6; else this.spool.dark = Math.max(0, (this.spool.dark || 0) - dt); }
+  }
   /** the things that can end me */
   dangers(T) {
     const { L, W } = this, b = this.me.b;
@@ -505,7 +582,7 @@ export class Game {
       // it doesn't kill you: it gets in
       if (w.dir > 0 ? b.y < w.y + w.len * out - 0.1 && b.y + h > w.y : b.y + h > w.y - w.len * out + 0.1 && b.y < w.y) { this.possessMe(); break; }
     }
-    if (b.x > L.water.x0 && b.x < L.water.x1 && W.water > b.y + 0.95 && b.y < L.water.y1) return this.die('water');
+    for (let i = 0; i < L.waters.length; i++) { const w = L.waters[i]; if (w.kind === 'race' && b.x > w.x0 && b.x < w.x1 && W.wl[i] > b.y + 0.95 && b.y < w.y1) return this.die('water'); if (w.kind === 'bog' && b.x > w.x0 && b.x < w.x1 && b.y < W.wl[i] - 0.25) return this.die('water'); }
     for (let i = 0; i < L.shears.length; i++) {
       const s = L.shears[i], beat = shearsBeat(s, T);
       if (this.beats[i] !== null && beat !== this.beats[i]) { this.sfx.play('snip', { x: s.x }); if (Math.abs(b.x - s.x) < 0.5 && b.y < s.y + 3.4 && b.y > s.y - 1) { this.beats[i] = beat; return this.die('shears'); } }
@@ -528,8 +605,9 @@ export class Game {
       // tied on both sides (the middle of three or four), you climb toward whichever side you push
       if (b.hang && (key === 'chasm' || key === 'chasm1' || !key)) key = this.meIdx > 0 && this.meIdx < this.n - 1 ? 'hangMid' : 'hang';
       key = this.collectorHint(b) || key;
-      if (this.wormT > 0) key = 'wormed';
-      else { const f = this.players.find((p) => !p.me && p.wormed && Math.abs(p.b.x - b.x) < 9); if (f) { key = 'friendWormed'; vars = { name: f.name }; } }
+      if (this.latchT > 0) key = 'latched';
+      else if (this.wormT > 0) key = 'wormed';
+      else { const f = this.players.find((p) => !p.me && p.wormed && Math.abs(p.b.x - b.x) < 9); if (f) { key = 'friendWormed'; vars = { name: f.name }; } const g = this.players.find((p) => !p.me && p.latched != null && Math.abs(p.b.x - b.x) < 9); if (g) { key = 'friendLatched'; vars = { name: g.name }; } }
       if (this.nearLever(b) >= 0) use = 'HOLD';
       else if (this.spool) use = this.spool.mode === 'follow' ? (this.nearHook(b) ? 'HANG' : b.ground ? 'SET' : null) : this.spool.mode === 'return' ? null : 'CALL';
     }
@@ -597,7 +675,8 @@ export class Game {
       p.rig.pose(dt, { x: rx, y: ry, z: 0, facing: b.facing, speed: Math.abs(b.vx) / SCALE, vx: b.vx, vy: b.vy, crouch: b.sneak, anim, t: time + p.i * 1.7, noShadow: true });
       if (Math.abs(p.tilt) > 0.01) p.rig.root.rotate(0, 0, p.tilt * 57.3);
       const kx = b.x, ky = b.y + (b.sneak ? 0.36 : WAIST);
-      p.halo.enabled = !p.hid;
+      const dark = p.me ? b.dark > 0 : !!p.dark;
+      p.halo.enabled = !p.hid && !dark;
       p.halo.setLocalPosition(kx, ky, 0.3);
       const hs = 0.27 + Math.sin(time * 6 + p.i * 2) * 0.02 + (b.braced ? 0.25 : 0);
       p.halo.setLocalScale(hs, hs, hs);
@@ -612,7 +691,8 @@ export class Game {
         p.eye.setLocalPosition(b.x + b.facing * 0.13, b.y + (b.sneak ? 0.62 : 0.98), 0.36); p.eye.setLocalScale(es, es, es);
         p.halo.enabled = false;
         lights.push({ x: kx, y: ky + 0.3, z: 0.9, r: 2.4 + Math.sin(time * 23) * 0.5, col: RED, k: 1.4, pri: p.me ? 3 : 1 });
-      } else if (!p.hid) lights.push({ x: kx, y: ky + 0.1, z: 0.9, r: 3.0 + (b.braced ? 1 : 0), col: AMBER, k: 1.0, pri: p.me ? 3 : 1 });
+      } else if (!p.hid && !dark) lights.push({ x: kx, y: ky + 0.1, z: 0.9, r: 3.0 + (b.braced ? 1 : 0), col: AMBER, k: 1.0, pri: p.me ? 3 : 1 });
+      else if (!p.hid && p.me) lights.push({ x: kx, y: ky + 0.4, z: 1.2, r: 1.6, col: [0.5, 0.55, 0.52], k: 0.35, pri: 3 }); // smothered: just enough to see yourself by
       // sounds of moving
       if (live && !b.dead) {
         if (b.ground && Math.abs(b.vx) > 0.4) { p.stepD += Math.abs(b.vx) * dt; if (p.stepD > (b.sneak ? 0.5 : 0.7)) { p.stepD = 0; sfx.play('step', { x: b.x, crouch: b.sneak, vol: b.sneak ? 0.15 : p.me ? 0.6 : 0.4 }); if (!b.sneak && !this.low) fx.burst('dust', b.x, b.y + 0.05, 0.4, 1, { spread: 0.3, power: 0.5 }); } }
@@ -630,7 +710,7 @@ export class Game {
       const [sx, sy] = this.spoolView.knot(this.spool), [ax, ay] = knot(me);
       if (!me.hid) { const d = Math.hypot(sx - ax, sy - ay); ends.push({ ax, ay, bx: sx, by: sy, len: this.spool.mode === 'return' ? d + 0.2 : clamp(d * 1.12 + 0.3, d, Math.max(d, LINK - me.b.reel)) }); }
       const lx = this.spoolView.x + 0.16, ly = this.spoolView.y + (this.spool.mode === 'hooked' ? 0 : 0.63);
-      lights.push({ x: lx, y: ly, z: 0.9, r: 6.5, col: AMBER, k: 2.0 + Math.sin(time * 9) * 0.12, pri: 2 });
+      if (!(this.spool.dark > 0)) lights.push({ x: lx, y: ly, z: 0.9, r: 6.5, col: AMBER, k: 2.0 + Math.sin(time * 9) * 0.12, pri: 2 });
     } else if (!(this.cutT > 0)) {
       for (let i = 0; i < this.n - 1; i++) {
         const p = this.players[i], q = this.players[i + 1];
@@ -644,7 +724,13 @@ export class Game {
     this.mon.forEach((m, i) => {
       const v = this.monViews[i];
       if (!this.isHost && live) { if (m.kind === 'crawler') { if (m.mode === 'roam') m.x = clamp(m.x + m.dir * 1.5 * dt, m.x0, m.x1); m.t += dt; } else m.t += dt; }
-      if (m.kind === 'crawler') { v.update(dt, m, T, m.y - 4.2); if (live && m.mode === 'hunt' && (this.skitT = (this.skitT || 0) - dt) <= 0) { this.skitT = 0.22; sfx.play('skitter', { x: m.x, vol: 0.8 }); } }
+      if (m.kind !== 'crawler' && m.kind !== 'collector') {
+        if (!this.isHost && live) m.t += dt;
+        const vic = m.who >= 0 ? this.players[m.who] : null;
+        v.update(dt, m, T, vic);
+        // the hum: rising as it comes, a whine when it hunts
+        if (live && m.kind === 'drinker' && m.mode !== 'dead' && m.mode !== 'perch' && Math.abs(m.x - this.cam.x) < 16 && ((v.humT = (v.humT || 0) - dt) <= 0)) { v.humT = 0.38; sfx.play('hum', { x: m.x, f: m.mode === 'hunt' ? 235 : m.mode === 'drink' ? 150 : 190, vol: m.mode === 'hunt' ? 1.1 : 0.6 }); }
+      } else if (m.kind === 'crawler') { v.update(dt, m, T, m.y - 4.2); if (live && m.mode === 'hunt' && (this.skitT = (this.skitT || 0) - dt) <= 0) { this.skitT = 0.22; sfx.play('skitter', { x: m.x, vol: 0.8 }); } }
       else { const c = this.caught >= 0 ? this.players[this.caught] : null; v.update(dt, m, T, c && m.mode === 'grab' ? { x: c.b.x, y: c.b.y } : null); const st = v.takeStomp(); if (st !== undefined && live && m.mode !== 'down') { sfx.play('stomp', { x: st, vol: 1 }); if (Math.abs(st - this.cam.x) < 16) fx.shake(0.22); fx.burst('dust', st, m.y + 0.1, 0.5, 4, { spread: 1, power: 0.6 }); } }
     });
     // ---- worms announce themselves
@@ -659,6 +745,7 @@ export class Game {
     if (W.phase === 'dead') this.deadT += dt;
     if (!this.attract) this.dread(dt, T, live);
     fx.update(dt);
+    this.gore.update(dt);
     // ---- camera: keep everyone in the picture
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
     for (const p of this.players) {
@@ -715,15 +802,15 @@ export class Game {
       for (const m of this.mon) {
         const dx = Math.abs(m.x - b.x);
         if (m.kind === 'crawler') {
-          const Z = L.crawlZone;
+          const Z = m.zone || L.monsters.find((q) => q.id === m.id).zone;
           if (b.x > Z.x0 - 4 && b.x < Z.x1 + 2) d = Math.max(d, 0.35 + 0.3 * Math.max(0, 1 - dx / 9) + (m.mode === 'roam' ? 0 : 0.45));
-        } else if (m.mode !== 'down' && dx < 18) d = Math.max(d, 0.25 + 0.4 * (1 - dx / 18) + (m.mode === 'hunt' || m.mode === 'grab' ? 0.4 : 0));
+        } else if (m.kind === 'drinker') { if (m.mode !== 'dead' && dx < 12) d = Math.max(d, 0.25 + 0.35 * (1 - dx / 12) + (m.mode === 'hunt' || m.mode === 'drink' ? 0.4 : 0)); } else if (m.mode !== 'down' && dx < 18) d = Math.max(d, 0.25 + 0.4 * (1 - dx / 18) + (m.mode === 'hunt' || m.mode === 'grab' ? 0.4 : 0));
       }
       for (const w of L.worms) if (Math.abs(w.x - b.x) < 2.2) d = Math.max(d, 0.3 + 0.35 * wormOut(w, T));
       if (L.bells.length && b.x > L.bells[0].x - 6 && b.x < L.bells[L.bells.length - 1].x + 3) d = Math.max(d, 0.3 + W.wake * 0.7);
-      if (W.waterT0 != null && b.x > L.water.x0 && b.x < L.water.x1) d = Math.max(d, 0.35 + Math.max(0, 1 - (b.y - W.water) / 4) * 0.5);
+      L.waters.forEach((w, i) => { if (W.wT0[w.id] != null && b.x > w.x0 && b.x < w.x1) d = Math.max(d, 0.35 + Math.max(0, 1 - (b.y - W.wl[i]) / 4) * 0.5); });
       if (this.players.some((p) => !p.me && p.wormed)) d = Math.max(d, 0.75);
-      if (this.wormT > 0) d = 1;
+      if (this.wormT > 0 || this.latchT > 0) d = 1;
     } else if (W.phase === 'dead') d = 0.6;
     d = Math.min(1, d);
     this.dreadK += (d - this.dreadK) * Math.min(1, dt * (d > this.dreadK ? 2.5 : 0.8));

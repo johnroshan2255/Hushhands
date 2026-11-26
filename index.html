@@ -46,8 +46,10 @@
       <p>one thread &nbsp;·&nbsp; one to four small wanderers</p>
     </div>
     <nav class="stack">
-      <button class="btn primary" id="mSolo">SET OUT ALONE</button>
+      <button class="btn primary" id="mContinue" hidden>CONTINUE <small id="mContinueS"></small></button>
+      <button class="btn" id="mSolo">SET OUT ALONE</button>
       <button class="btn" id="mTogether">SET OUT TOGETHER <small>2 – 4</small></button>
+      <button class="btn ghost" id="mJourneys">JOURNEYS &amp; CHAPTERS</button>
       <button class="btn ghost" id="mSettings">SETTINGS</button>
     </nav>
     <footer id="mFoot"></footer>
@@ -73,12 +75,31 @@
     </div>
   </section>
 
+  <!-- ============ journeys (save slots) and chapters ============ -->
+  <section id="journeys" class="overlay" hidden>
+    <div class="panel wide">
+      <h2>JOURNEYS</h2>
+      <p class="sub">The Loom remembers where each journey last woke. It saves at every lantern.</p>
+      <ol id="jSlots" class="slots"></ol>
+      <h3>CHAPTERS</h3>
+      <p class="sub">Start again from any chapter you have reached, alone. (Together, the one who leads picks it in the thread.)</p>
+      <ol id="jChapters" class="chapters"></ol>
+      <div class="row"><button class="btn ghost" id="jBack">BACK</button></div>
+    </div>
+  </section>
+
+  <!-- ============ the card between chapters ============ -->
+  <section id="between" class="overlay story between" hidden>
+    <div class="tale"><p class="was" id="bwWas"></p><small id="bwNum"></small><h2 id="bwName"></h2></div>
+  </section>
+
   <!-- ============ the thread (lobby) ============ -->
   <section id="lobby" class="overlay clear" hidden>
     <div class="panel">
       <h2>THE THREAD</h2>
       <div class="codebox"><span>CODE</span><b id="lCode">······</b><button class="btn small" id="lCopy">COPY LINK</button></div>
       <ol id="lList"></ol>
+      <label class="field" id="lFromBox" hidden><span>FROM</span><select id="lFrom"></select></label>
       <p class="sub" id="lNote"></p>
       <div class="row">
         <button class="btn primary" id="lStart">SET OUT</button>
@@ -131,6 +152,7 @@
       <label class="slider"><span>SOUND</span><input type="range" id="sSfx" min="0" max="100" /></label>
       <label class="slider"><span>MUSIC</span><input type="range" id="sMusic" min="0" max="100" /></label>
       <label class="slider"><span>BRIGHTNESS</span><input type="range" id="sBright" min="70" max="150" /></label>
+      <div class="toggle"><span>GORE</span><button class="btn small" id="sGore">FULL</button><small id="sGoreS">red dye, torn limbs</small></div>
       <div class="keys" id="pKeys"></div>
       <div class="row">
         <button class="btn primary" id="pResume">BACK</button>

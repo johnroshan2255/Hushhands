@@ -288,3 +288,9 @@ export class Rig {
 
   destroy() { this.root.destroy(); }
 }
+
+/** the doll's pieces, for a body that has stopped being a doll (src/gore.js) */
+export function dollMeshes(device, variant = 0) {
+  if (!MAT) { MAT = worldMaterial(); SHADOW = tintMaterial(); SHADOW.setParameter('uTint', new Float32Array([0, 0, 0, 0.42])); }
+  return { mat: MAT, torso: torsoMesh(device), pelvis: pelvisMesh(device), head: headMesh(device, variant), armU: armMesh(device, false), armL: armMesh(device, true), legU: legMesh(device, false), legL: legMesh(device, true), foot: footMesh(device), dims: DOLL };
+}

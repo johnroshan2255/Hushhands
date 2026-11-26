@@ -157,7 +157,7 @@ export class Scene {
   buildShafts() {
     const L = this.L, rng = mulberry32(991 + L.n);
     if (!this.M.shaft) { this.M.shaft = glowMaterial(0.42); this.M.shaft.setParameter('uTint', new Float32Array([0.78, 0.86, 0.84, 1])); }
-    const per = { meadow: 3, chasm: 1, den: 1, gears: 1, bridge: 2, cathedral: 1, collector: 2, spindle: 2 };
+    const per = { meadow: 3, chasm: 1, den: 1, gears: 1, bridge: 2, cathedral: 1, collector: 2, spindle: 2, fen: 6, pit: 1 };
     const spots = [];
     for (const z of L.zones) {
       const n = per[z.name] || 0;
@@ -203,7 +203,7 @@ export class Scene {
     const CH = 56;
     const chunks = new Map();
     const chunk = (x) => { const k = Math.floor(x / CH); if (!chunks.has(k)) chunks.set(k, new MeshBuilder()); return chunks.get(k); };
-    const outdoors = (x) => ['pit', 'meadow', 'chasm', 'bridge', 'collector', 'spindle'].includes(this.zoneAt(x));
+    const outdoors = (x) => ['pit', 'meadow', 'chasm', 'bridge', 'collector', 'spindle', 'fen'].includes(this.zoneAt(x));
     // ---- the solid boxes
     for (const s of L.solids) {
       if (s.gate !== undefined) continue;
@@ -228,7 +228,7 @@ export class Scene {
       for (let x = s.x0 + 0.2; x < s.x1 - 0.2; x += 0.16 + rng() * 0.5) {
         const zn = this.zoneAt(x);
         if (this.groundY(x) !== s.y1) continue;
-        const lush = zn === 'meadow' ? 1 : zn === 'pit' || zn === 'chasm' || zn === 'collector' || zn === 'spindle' ? 0.35 : zn === 'bridge' ? 0.2 : 0.06;
+        const lush = zn === 'meadow' || zn === 'fen' ? 1 : zn === 'pit' || zn === 'chasm' || zn === 'collector' || zn === 'spindle' ? 0.35 : zn === 'bridge' ? 0.2 : 0.06;
         if (rng() > lush) continue;
         const tall = zn === 'meadow' ? 0.3 + rng() * 0.55 : 0.12 + rng() * 0.3;
         const n = low ? 1 : 2 + Math.floor(rng() * 2);
@@ -277,7 +277,31 @@ export class Scene {
         addBeam(mb, x - 1.6, y + h + 0.7, x, y + h + 1.7, z, 0.3, 0.6, ink()); addBeam(mb, x + 1.6, y + h + 0.7, x, y + h + 1.7, z, 0.3, 0.6, ink());
         break;
       }
+      case 'exitarch': { // the way on: a tall pointed arch, deeper dark inside, a pale breath of light beyond
+        const z = -1.2, h = 4.6;
+        for (const sx of [-1, 1]) { bx(mb, x + sx * 1.25 - 0.3, x + sx * 1.25 + 0.3, y - 0.2, y + h, z - 0.5, z + 0.5, ink()); addBeam(mb, x + sx * 1.25, y + h, x, y + h + 1.9, z, 0.5, 0.9, ink(), 0.3); }
+        bx(mb, x - 1.7, x + 1.7, y - 0.25, y + 0.1, z - 0.8, z + 0.8, ink(1.2));
+        for (let i = 0; i < 3; i++) addBeam(mb, x - 1.0 + i, y + h + 0.3, x - 1.0 + i + (rng() - 0.5) * 0.2, y + h - 0.8 - rng(), z + 0.6, 0.03, 0.03, ink(1.4));
+        break;
+      }
       case 'grass': break; // (the meadow's grass is grown with the rest)
+      case 'mud': // a black, wet mound you can creep into
+        for (let mx = x + 0.3; mx < x + d.w; mx += 0.5 + rng() * 0.4) addSphere(mb, { x: mx, y: y - 0.05, z: -0.6 + rng() * 2.2, r: 0.35 + rng() * 0.3, sy: 0.32, segW: 8, segH: 4, colFn: () => ink(0.55) });
+        for (let i = 0; i < 4; i++) addSphere(mb, { x: x + rng() * d.w, y: y + 0.05, z: 2.0, r: 0.06 + rng() * 0.05, segW: 5, segH: 4, colFn: () => ink(2.2) }); // bubbles on its skin
+        break;
+      case 'reeds': // cattails: stalks with a fat seed-head, bent every way
+        for (let rx = x; rx < x + d.w; rx += 0.18 + rng() * 0.45) {
+          const z = d.far ? -2.5 - rng() * 3 : [-1.8, -1.1, 1.4, 2.1][Math.floor(rng() * 4)], h = 1.2 + rng() * 1.6, lean = (rng() - 0.5) * 0.7;
+          addBeam(mb, rx, y - 0.2, rx + lean, y + h, z, 0.035, 0.03, ink(), 0.015);
+          if (rng() < 0.55) addSphere(mb, { x: rx + lean * 0.92, y: y + h * 0.9, z, r: 0.06, sy: 3, segW: 5, segH: 4, colFn: () => ink() });
+        }
+        break;
+      case 'bird': // a dead bird on a branch, wings hanging
+        addSphere(mb, { x, y, z: 0, r: 0.2, sy: 0.7, segW: 8, segH: 5, colFn: () => ink() });
+        addSphere(mb, { x: x + 0.2, y: y + 0.08, z: 0, r: 0.09, segW: 6, segH: 4, colFn: () => ink() });
+        addBeam(mb, x - 0.1, y, x - 0.5, y - 0.45, 0.05, 0.16, 0.02, ink(), 0.05); addBeam(mb, x + 0.05, y, x + 0.1, y - 0.55, -0.05, 0.14, 0.02, ink(), 0.04);
+        addBeam(mb, x - 1.2, y - 0.2, x + 1.0, y - 0.1, -0.1, 0.1, 0.1, ink());
+        break;
       case 'bones': // a ribcage, half sunk
         for (let i = 0; i < 6; i++) { const rx = x + i * 0.34; addBeam(mb, rx, y - 0.1, rx + 0.1, y + 0.75 - Math.abs(i - 2.5) * 0.12, -1.3, 0.05, 0.05, ink(), 0.03); addBeam(mb, rx + 0.1, y + 0.75 - Math.abs(i - 2.5) * 0.12, rx + 0.42, y + 0.95 - Math.abs(i - 2.5) * 0.12, -1.3, 0.04, 0.04, ink(), 0.02); }
         addBeam(mb, x - 0.4, y + 0.22, x + 2.2, y + 0.12, -1.3, 0.09, 0.09, ink());
@@ -444,13 +468,18 @@ export class Scene {
     const bladeM = SM('blade', (mb) => { const z = 0.08; const P = [[-0.5, 3.6], [0.5, 3.6], [0.42, 1.0], [0, 0], [-0.42, 1.0]]; for (const zz of [z, -z]) { const k = mb.count; for (const p of P) mb.vert(p[0], p[1], zz, 0, 0, zz > 0 ? 1 : -1, ink(p[1] < 0.5 ? 2.2 : 1)); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 4); mb.tri(k + 2, k + 3, k + 4); } bx(mb, -0.6, 0.6, 3.5, 4.2, -0.2, 0.2, ink()); bx(mb, -0.11, 0.11, 4.2, 8.4, -0.11, 0.11, ink()); });
     this.shears = L.shears.map((s) => { const up = ent(root, bladeM, M.world, s.x, s.y + 3.4, 0); const dn = ent(root, bladeM, M.world, s.x, s.y - 0.2, 0); dn.setLocalEulerAngles(0, 0, 180); dn.setLocalScale(1, 0.45, 1); return { s, up, dn }; });
     // water
-    if (L.water) {
-      const W = L.water;
+    this.waters = [];
+    for (const W of L.waters) {
       const m = this.mesh((mb) => { const q = (y0, y1, c0, c1) => { const k = mb.count; mb.vert(0, y0, 0, 0, 0, 1, c0); mb.vert(1, y0, 0, 0, 0, 1, c0); mb.vert(1, y1, 0, 0, 0, 1, c1); mb.vert(0, y1, 0, 0, 0, 1, c1); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3); }; q(-1, 0, rgba(0.02, 0.035, 0.035, 0.86), rgba(0.05, 0.08, 0.08, 0.66)); });
       const top = this.mesh((mb) => { const k = mb.count; for (const [x, y] of [[0, -0.07], [1, -0.07], [1, 0], [0, 0]]) mb.vert(x, y, 0, 0, 0, 1, rgba(0.62, 0.7, 0.68, y ? 0.1 : 0.55)); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3); });
-      this.water = { W, e: ent(root, m, M.water, W.x0, W.floor, 1.3, 80), top: ent(root, top, M.water, W.x0, W.floor, 1.31, 81) };
-      this.water.e.enabled = this.water.top.enabled = false;
+      const o = { W, e: ent(root, m, M.water, W.x0, W.floor, 1.3, 80), top: ent(root, top, M.water, W.x0, W.floor, 1.31, 81) };
+      o.e.enabled = o.top.enabled = false;
+      this.waters.push(o);
     }
+    // candles: a fat stub on a dish, a flame that flickers and lights the reeds
+    const stubM = SM('candle', (mb) => { addCylinder(mb, { y: 0, r0: 0.09, r1: 0.08, h: 0.75, seg: 8, colFn: () => ink(1.4) }); addCylinder(mb, { y: -0.02, r0: 0.25, r1: 0.22, h: 0.06, seg: 10, colFn: () => ink() }); addCylinder(mb, { y: -0.3, r0: 0.04, r1: 0.04, h: 0.3, seg: 5, colFn: () => ink() }); addBeam(mb, -0.08, 0.6, -0.12, 0.42, 0.06, 0.03, 0.03, ink(1.8)); });
+    const flameM = SM('flame', (mb) => addSphere(mb, { y: 0.1, r: 0.07, sy: 2.2, segW: 7, segH: 6, colFn: () => amber(1.3, 1) }));
+    this.candles = L.candles.map((c) => { const e = ent(root, stubM, M.world, c.x, c.y + 0.3, -0.2); const f = ent(root, flameM, M.world, c.x, c.y + 1.08, -0.2); const h = glow(root, 0.9, c.x, c.y + 1.15, 0.1); return { c, e, f, h }; });
     // the spindle's rings
     const beamM = SM('ringbeam', (mb) => { const k = mb.count; for (const [x, y, a] of [[-0.7, 0, 0.5], [0.7, 0, 0.5], [0.5, 7, 0], [-0.5, 7, 0]]) mb.vert(x, y, 0, 0, 0, 1, rgba(1, 0.62, 0.22, a)); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3); });
     this.rings = L.rings.map((r) => { const lamp = ent(root, lampM, M.world, r.x, r.y + 0.09, 0.86); lamp.setLocalScale(1.6, 0.04, 0.03); const beam = ent(root, beamM, M.beam, r.x, r.y + 0.1, -0.3, 88); lamp.enabled = beam.enabled = false; return { r, lamp, beam, k: 0 }; });
@@ -473,6 +502,8 @@ export class Scene {
     const lit = this.lit;
     lit.length = 0;
     for (const s of this.shafts || []) lit.push({ x: s.x, y: s.y + 0.6, z: 0.9, r: 2.2 + s.w, col: [0.72, 0.8, 0.78], k: 0.55 * s.k, pri: 0 });
+    for (const o of this.candles || []) { const fl = 0.85 + Math.sin(T * 13 + o.c.x) * 0.08 + Math.sin(T * 31 + o.c.x * 3) * 0.05; o.f.enabled = o.h.enabled = !o.c.out; if (o.c.out) continue; o.f.setLocalScale(1, fl, 1); o.h.setLocalScale(0.7 * fl, 0.9 * fl, 0.7); lit.push({ x: o.c.x, y: o.c.y + 1.2, z: 0.4, r: 4.8, col: [1, 0.6, 0.25], k: 1.7 * fl, pri: 1 }); }
+    if (this.L.exit) { const e = this.L.exit; lit.push({ x: e.x + 0.6, y: e.y + 2, z: -0.4, r: 4.2, col: [0.78, 0.84, 0.8], k: 0.9 + Math.sin(T * 0.8) * 0.1, pri: 0 }); }
     const ease = (o, to, rate) => { o.k += (to - o.k) * Math.min(1, dt * rate); return o.k; };
     for (const o of this.gates) { const k = ease(o, W.open[o.g.id] ? 1 : 0, 3.2); o.e.setLocalPosition(o.g.x, o.g.y - k * (o.g.h + 0.7) + (k > 0.02 && k < 0.97 ? Math.sin(T * 60) * 0.015 : 0), 0); }
     this.plates.forEach((o, i) => { const on = !!W.plates[i] || !!W.open[o.p.id]; const k = ease(o, W.plates[i] ? 1 : 0, 14); o.e.setLocalPosition(o.p.x, o.p.y - k * 0.1, 0); if (o.lamp.enabled !== on) o.lamp.enabled = o.h.enabled = on; if (on) lit.push({ x: o.p.x, y: o.p.y + 0.5, z: 0.8, r: 3.2, col: AMBER, k: 1.5 }); });
@@ -496,7 +527,7 @@ export class Scene {
     for (const o of this.cogs) o.e.setLocalEulerAngles(0, 0, ((T * 360 * o.d.dir) / o.d.period) % 360);
     for (const o of this.pads) { const p = cogPad(o.c, o.k, T); o.e.setLocalPosition(p.x, p.y, 0); }
     for (const o of this.shears) { const k = shearsShut(o.s, T), sh = shearsWarn(o.s, T) ? Math.sin(T * 55) * 0.05 : 0; o.up.setLocalPosition(o.s.x + sh, o.s.y + 3.4 - k * 2.5, 0); o.dn.setLocalPosition(o.s.x - sh, o.s.y - 0.2 + k * 1.45, 0); }
-    if (this.water) { const w = this.water, h = W.water - w.W.floor; const on = h > 0.02; if (w.e.enabled !== on) w.e.enabled = w.top.enabled = on; if (on) { const wd = w.W.x1 - w.W.x0; w.e.setLocalPosition(w.W.x0, W.water, 1.3); w.e.setLocalScale(wd, h, 1); w.top.setLocalPosition(w.W.x0, W.water + Math.sin(T * 1.6) * 0.02, 1.31); w.top.setLocalScale(wd, 1, 1); } }
+    this.waters.forEach((w, i) => { const lv = W.wl[i], h = lv - w.W.floor; const on = h > 0.02; if (w.e.enabled !== on) w.e.enabled = w.top.enabled = on; if (on) { const wd = w.W.x1 - w.W.x0; w.e.setLocalPosition(w.W.x0, lv, 1.3); w.e.setLocalScale(wd, h, 1); w.top.setLocalPosition(w.W.x0, lv + Math.sin(T * 1.6 + i) * 0.02, 1.31); w.top.setLocalScale(wd, 1, 1); } });
     this.rings.forEach((o, i) => { const on = !!W.rings[i] || W.won > 0; if (o.lamp.enabled !== on) o.lamp.enabled = o.beam.enabled = on; if (on) lit.push({ x: o.r.x, y: o.r.y + 0.6, z: 0.9, r: 4, col: AMBER, k: 1.8 }); });
     if (this.spin) { const on = W.won > 0.001; if (this.spin.e.enabled !== on) this.spin.e.enabled = on; if (on) { setTint(this.spin.mat, 1, 1, 1, W.won * 0.42); lit.push({ x: this.spin.d.x, y: this.spin.d.y + 8, z: -2, r: 30, col: AMBER, k: 2.6 * W.won, pri: 5 }); } }
   }

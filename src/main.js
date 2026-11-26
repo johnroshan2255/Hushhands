@@ -6,6 +6,8 @@ import { Input } from './input.js';
 import { Net } from './net.js';
 import { Game } from './game.js';
 import * as portal from './portal.js';
+import * as saves from './save.js';
+import { CHAPTERS } from './chapters/index.js';
 
 const $ = (id) => document.getElementById(id);
 const q = new URLSearchParams(location.search);
@@ -53,6 +55,15 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Fen
+  latched: [`A DRINKER IS ON YOU. Hammer ${K('SPACE')} to shake it off`, `A DRINKER IS ON YOU. Hammer ${K('JUMP')} to shake it off`],
+  friendLatched: [`A Drinker is drinking {name}. Get close and press ${K('E')} to tear it off`, `A Drinker is drinking {name}. Get close and press ${K('USE')} to tear it off`],
+  fen: ['They hunt by light, and your thread is light', 'They hunt by light, and your thread is light'],
+  mud: [`Creep through the mud (${K('S')}): it smothers your glow, and they cannot see you`, 'Creep through the mud (pull the stick down): it smothers your glow, and they cannot see you'],
+  candle: ['Let it chase you past the flame', 'Let it chase you past the flame'],
+  bog: ['The bog takes whatever falls in. Stone to stone', 'The bog takes whatever falls in. Stone to stone'],
+  dark: ['Dark, all of you, and cross one at a time', 'Dark, all of you, and cross one at a time'],
+  dark1: ['Dark, and cross. Leave the spool lit as bait if you must', 'Dark, and cross. Leave the spool lit as bait if you must'],
   rings1: ['One ring for you, one for your spool', 'One ring for you, one for your spool'],
 };
 const USES = { HOLD: 'hold the lever', HANG: 'hang the spool on the hook', SET: 'set the spool down here', CALL: 'call the spool back' };
@@ -93,7 +104,7 @@ async function boot() {
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;
@@ -127,6 +138,14 @@ async function boot() {
     },
     toast(text) { const t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4200); },
     end(s) { showEnd(s); },
+    /** the card between chapters: the last one's lines, then the next one's name; then() starts it */
+    between({ num, name, lines }, then) {
+      const el = $('between');
+      $('bwWas').textContent = (lines || []).join('\n'); $('bwNum').textContent = `CHAPTER ${num}`; $('bwName').textContent = name;
+      el.hidden = false; void el.offsetWidth; el.classList.add('on');
+      sfx.play('whisper', { vol: 0.5 });
+      setTimeout(() => { then(); setTimeout(() => { el.classList.remove('on'); setTimeout(() => { el.hidden = true; }, 1000); }, 400); }, 4600);
+    },
   };
   const game = new Game({ app, R, sfx, input, net, hud, low: level === 0 });
   window.__tb = { game, net, input, hud, state: () => state };
@@ -148,15 +167,61 @@ async function boot() {
     renderHint();
     if (s !== 'play') { hud.tags([]); hud.dread(0, 0, 60); sfx.drone(0); sfx.duck(1); $('trial').hidden = true; } else if (typeof renderTrial === 'function' && trialReady) renderTrial();
   }
-  function attract() { game.start({ order: soloOrder(), meId: 'me', attract: true }); }
-  function toMenu() { show('pause', false); show('together', false); attract(); setState('menu'); }
-  function playSolo(fresh) {
-    sfx.init(); sfx.play('select');
-    if (fresh || !game.running || !game.attract || game.n !== 1) game.start({ order: soloOrder(), meId: 'me', runT0: 0 }); else game.begin();
-    game.Tlocal = game.Tlocal || 0;
-    if (fresh || game.runT0 == null) game.runT0 = game.T();
-    setState('play');
+  // ---- journeys: every lantern saves to the journey being played (alone, or as host or guest)
+  saves.useStorage(portal.portalStorage?.());
+  game.onSave = (s) => { if (net.online && !net.isHost) { saves.write('g', s); return; } let slot = saves.current(); if (slot < 0) { slot = saves.freeSlot(); saves.setCurrent(slot); } saves.write(slot, s); refreshMenu(); };
+  game.goreMode = store.get('tb.gore', portal.ON_CRAZY ? 'stitched' : 'full');
+  function refreshMenu() {
+    const s = saves.read(saves.current());
+    show('mContinue', !!s && !s.done);
+    if (s) $('mContinueS').textContent = saves.describe(s);
+    $('mSolo').classList.toggle('primary', !s || !!s.done);
+    $('mSolo').textContent = s ? 'NEW JOURNEY ALONE' : 'SET OUT ALONE';
   }
+  function attract() { const s = saves.read(saves.current()); game.start({ order: soloOrder(), meId: 'me', attract: true, chapter: s && !s.done ? s.ci : 0 }); }
+  function toMenu() { show('pause', false); show('together', false); show('journeys', false); attract(); setState('menu'); refreshMenu(); }
+  /** alone: a new journey (fresh), or from a save ({ ci, lantern, deaths, cuts, time, found }) */
+  function playSolo(fresh, from = null) {
+    sfx.init(); sfx.play('select');
+    if (fresh && !from) { const slot = saves.freeSlot(); saves.erase(slot); saves.setCurrent(slot); }
+    const ci = from ? from.ci ?? 0 : 0;
+    if (from || fresh || !game.running || !game.attract || game.n !== 1 || game.ci !== 0) game.start({ order: soloOrder(), meId: 'me', runT0: 0, chapter: ci, cp: from?.lantern ?? 0, deaths: from?.deaths ?? 0, cut: from?.cuts ?? 0, found: from?.found ?? [] }); else game.begin();
+    game.timeBefore = from?.time ?? 0;
+    game.Tlocal = game.Tlocal || 0;
+    if (fresh || from || game.runT0 == null) game.runT0 = game.T();
+    setState('play');
+    game.saveNow();
+  }
+  $('mContinue').addEventListener('click', () => { const s = saves.read(saves.current()); if (s) playSolo(false, s); });
+  // ---- the journeys panel: three slots, and every chapter reached
+  function renderJourneys() {
+    const ol = $('jSlots'); ol.innerHTML = '';
+    saves.all().forEach((s, i) => {
+      const li = document.createElement('li'); if (!s) li.className = 'empty';
+      const w = document.createElement('div'); w.className = 'what';
+      const b = document.createElement('b'); b.textContent = s ? `${i === saves.current() ? '▸ ' : ''}JOURNEY ${i + 1}  ·  ${saves.describe(s)}${s.done ? '  ·  ENDED' : ''}` : `JOURNEY ${i + 1}  ·  not begun`;
+      const sm = document.createElement('small'); sm.textContent = s ? saves.stats(s) : '';
+      w.append(b, sm); li.appendChild(w);
+      const go = document.createElement('button'); go.className = 'btn small'; go.textContent = s ? (s.done ? 'AGAIN' : 'GO ON') : 'BEGIN';
+      go.addEventListener('click', () => { saves.setCurrent(i); show('journeys', false); if (s && !s.done) playSolo(false, s); else { saves.erase(i); saves.setCurrent(i); firstStory(() => playSolo(false, { ci: 0 })); } });
+      li.appendChild(go);
+      if (s) { const x = document.createElement('button'); x.className = 'btn small ghost'; x.textContent = 'FORGET'; x.addEventListener('click', () => { if (x.dataset.sure) { saves.erase(i); renderJourneys(); refreshMenu(); } else { x.dataset.sure = '1'; x.textContent = 'SURE?'; } }); li.appendChild(x); }
+      ol.appendChild(li);
+    });
+    const ch = $('jChapters'); ch.innerHTML = '';
+    const top = saves.reached();
+    CHAPTERS.forEach((C, i) => {
+      const li = document.createElement('li'); if (i > top) li.className = 'locked';
+      const w = document.createElement('div'); w.className = 'what';
+      const b = document.createElement('b'); b.textContent = i > top ? `${C.num}  ·  ? ? ?` : `${C.num}  ·  ${C.name}`;
+      const sm = document.createElement('small'); sm.textContent = `act ${['', 'I', 'II', 'III', 'IV', 'V'][C.act]}`;
+      w.append(b, sm); li.appendChild(w);
+      if (i <= top) { const go = document.createElement('button'); go.className = 'btn small'; go.textContent = 'PLAY'; go.addEventListener('click', () => { show('journeys', false); if (saves.current() < 0) saves.setCurrent(saves.freeSlot()); const s = saves.read(saves.current()) || {}; playSolo(false, { ci: i, lantern: 0, deaths: s.deaths || 0, cuts: s.cuts || 0, time: s.time || 0, found: s.found || [] }); }); li.appendChild(go); }
+      ch.appendChild(li);
+    });
+  }
+  $('mJourneys').addEventListener('click', () => { sfx.init(); sfx.play('click'); renderJourneys(); show('journeys', true); });
+  $('jBack').addEventListener('click', () => { sfx.play('click'); show('journeys', false); });
   // ---- the story: told once, before the first journey (and again from i)
   let storyTimer = 0, afterStory = null;
   function showStory(then) {
@@ -251,6 +316,9 @@ async function boot() {
   $('sSfx').addEventListener('input', (e) => sfx.setVolume('sfx', e.target.value / 100));
   $('sMusic').addEventListener('input', (e) => sfx.setVolume('music', e.target.value / 100));
   $('sBright').addEventListener('input', (e) => { hud.expo = e.target.value / 100; store.set('tb.bright', e.target.value); });
+  const goreUI = () => { const full = game.goreMode !== 'stitched'; $('sGore').textContent = full ? 'FULL' : 'STITCHED'; $('sGoreS').textContent = full ? 'red dye, torn limbs' : 'grey stuffing, nothing torn off'; };
+  goreUI();
+  $('sGore').addEventListener('click', () => { sfx.play('click'); game.goreMode = game.goreMode === 'stitched' ? 'full' : 'stitched'; store.set('tb.gore', game.goreMode); game.gore.setting = game.goreMode; goreUI(); });
   addEventListener('keydown', (e) => { if (e.code !== 'Escape' && e.code !== 'KeyP') return; if (e.target && e.target.tagName === 'INPUT') return; if (!$('info').hidden) { closeInfo(); return; } if (!$('pause').hidden) closePause(); else if (state === 'play') openPause('PAUSED'); });
   document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play' && !net.online && $('pause').hidden) openPause('PAUSED'); });
   addEventListener('touchstart', () => { if (!touchUI) { touchUI = true; setState(state); } }, { passive: true });
@@ -331,11 +399,23 @@ async function boot() {
     }
     const n = ps.length;
     $('lStart').hidden = !net.isHost;
+    $('lFromBox').hidden = !net.isHost;
+    if (net.isHost && !$('lFrom').options.length) {
+      const sel = $('lFrom'), cur = saves.read(saves.current());
+      const add = (v, t) => { const o = document.createElement('option'); o.value = v; o.textContent = t; sel.appendChild(o); };
+      if (cur && !cur.done && (cur.ci || cur.lantern)) add('save', `where you left off: ${saves.describe(cur)}`);
+      CHAPTERS.forEach((C, i) => { if (i <= saves.reached()) add(String(i), `chapter ${C.num}  ·  ${C.name}`); });
+    }
     $('lStart').textContent = n > 1 ? `SET OUT, ${['', '', 'TWO', 'THREE', 'FOUR'][n]} TOGETHER` : 'SET OUT ALONE';
     $('lNote').textContent = net.isHost ? (n > 1 ? `The Loom will be built for ${n}: every one of you will be needed.` : 'Share the code. The Loom is built for however many set out.') : 'Waiting for the one who leads to set out.';
     portal.inRoom(net.code, n < 4 && !net.run);
   }
-  $('lStart').addEventListener('click', () => { sfx.play('select'); net.send('start', {}); });
+  $('lStart').addEventListener('click', () => {
+    sfx.play('select');
+    const v = $('lFrom').value || '0', cur = saves.read(saves.current());
+    if (v === 'save' && cur) net.send('start', { chapter: cur.ci, cp: cur.lantern, deaths: cur.deaths, time: cur.time, found: cur.found });
+    else { if (saves.current() < 0 || (cur && +v === 0)) { const slot = saves.freeSlot(); saves.erase(slot); saves.setCurrent(slot); } net.send('start', { chapter: +v, cp: 0, deaths: 0, time: 0 }); }
+  });
   $('lLeave').addEventListener('click', () => { sfx.play('click'); leaveAll(); });
   $('lCopy').addEventListener('click', async () => {
     const link = portal.inviteLink(net.code) || `${location.origin}${location.pathname}?room=${net.code}`;
@@ -346,7 +426,8 @@ async function boot() {
     const order = run.order.map((id) => net.players.find((p) => p.id === id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name, slot: p.slot }));
     if (!order.length) return;
     show('pause', false);
-    game.start({ order, meId: net.id, startedAt: run.startedAt, runT0: 0 });
+    game.start({ order, meId: net.id, startedAt: run.startedAt, runT0: 0, chapter: run.chapter | 0, cp: run.cp | 0, deaths: run.deaths | 0, found: run.found || [] });
+    game.timeBefore = run.time | 0;
     setState('play');
     portal.inRoom(net.code, false);
   }
@@ -369,6 +450,7 @@ async function boot() {
   });
   app.start();
   stage('', 1);
+  refreshMenu();
   setState('menu');
   $('mFoot').textContent = +store.get('tb.best1', '0') ? `your best alone  ${Math.floor(+store.get('tb.best1', '0') / 60)}:${String(+store.get('tb.best1', '0') % 60).padStart(2, '0')}` : '';
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));

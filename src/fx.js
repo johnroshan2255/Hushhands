@@ -10,6 +10,11 @@ const KINDS = {
   dust: { mat: 'tint', col: [0.16, 0.17, 0.17, 0.32], size: [0.06, 0.15], grav: -0.4, life: [0.45, 0.9], spin: 0, speed: [0.25, 0.9], up: 0.2, grow: 1.6, round: true }, // dark soft smoke, not pale blobs
   ember: { mat: 'glow', col: [1, 0.62, 0.22, 1], size: [0.03, 0.06], grav: -1.2, life: [0.5, 1.2], spin: 0, speed: [0.4, 1.8], up: 1.0, round: true },
   spark: { mat: 'glow', col: [1, 0.75, 0.4, 1], size: [0.03, 0.06], grav: 9, life: [0.25, 0.55], spin: 0, speed: [1.5, 4.5], up: 1.5 },
+  // the dolls are stuffed with dye-soaked wadding: it sprays red, and the wadding spills out
+  dye: { mat: 'world', col: [0.62, 0.035, 0.03, 0.42], size: [0.035, 0.11], grav: 17, life: [0.6, 1.3], spin: 10, speed: [1.5, 5.5], up: 2.6, round: true },
+  mist: { mat: 'tint', col: [0.5, 0.02, 0.02, 0.55], size: [0.08, 0.2], grav: 1.5, life: [0.4, 0.9], spin: 0, speed: [0.4, 1.6], up: 0.5, grow: 2, round: true },
+  stuff: { mat: 'world', col: [0.46, 0.13, 0.11, 0.06], size: [0.06, 0.13], grav: 6, life: [1.4, 2.6], spin: 3, speed: [0.6, 2.4], up: 1.8, round: true },
+  wad: { mat: 'world', col: [0.42, 0.42, 0.39, 0.04], size: [0.06, 0.13], grav: 6, life: [1.4, 2.6], spin: 3, speed: [0.6, 2.4], up: 1.8, round: true },
   drop: { mat: 'tint', col: [0.7, 0.78, 0.76, 0.6], size: [0.04, 0.09], grav: 14, life: [0.4, 0.8], spin: 0, speed: [1, 3.5], up: 3, round: true },
 };
 
@@ -18,10 +23,11 @@ export class FX {
     this.app = app;
     const device = app.graphicsDevice;
     this.mats = { world: worldMaterial(), glow: glowMaterial(1), tint: tintMaterial() };
-    const chip = (() => { const mb = new MeshBuilder(); addBox(mb, { sx: 1, sy: 0.25, sz: 0.7, col: rgba(1, 1, 1, 1) }); return mb.build(device); })();
-    const puff = (() => { const mb = new MeshBuilder(); addSphere(mb, { r: 0.5, segW: 14, segH: 9, colFn: () => rgba(1, 1, 1, 1) }); return mb.build(device); })();
-    const disc = (() => { const mb = new MeshBuilder(); addCylinder(mb, { r0: 0.5, r1: 0.5, h: 0.12, seg: 10, capBottom: true, colFn: () => rgba(1, 1, 1, 1) }); return mb.build(device); })();
-    this.meshes = { chip, puff, disc };
+    // (the world shader's glow lights a vertex by its own colour: world bits carry theirs in the mesh)
+    const shapes = (c) => ({ chip: (() => { const mb = new MeshBuilder(); addBox(mb, { sx: 1, sy: 0.25, sz: 0.7, col: c }); return mb.build(device); })(), puff: (() => { const mb = new MeshBuilder(); addSphere(mb, { r: 0.5, segW: 10, segH: 7, colFn: () => c }); return mb.build(device); })(), disc: (() => { const mb = new MeshBuilder(); addCylinder(mb, { r0: 0.5, r1: 0.5, h: 0.12, seg: 10, capBottom: true, colFn: () => c }); return mb.build(device); })() });
+    this.meshes = shapes(rgba(1, 1, 1, 1));
+    this.kindMeshes = {};
+    for (const k in KINDS) if (KINDS[k].mat === 'world') { const C = KINDS[k].col; this.kindMeshes[k] = shapes(rgba(C[0], C[1], C[2], C[3])); }
     this.pool = [];
     this.live = [];
     this.root = new pc.Entity('fx');
@@ -33,7 +39,7 @@ export class FX {
   matFor(kind) {
     if (this.matCache.has(kind)) return this.matCache.get(kind);
     const K = KINDS[kind];
-    const m = K.mat === 'world' ? worldMaterial({ tint: [K.col[0], K.col[1], K.col[2], K.col[3]] }) : K.mat === 'glow' ? glowMaterial(1) : tintMaterial();
+    const m = K.mat === 'world' ? worldMaterial() : K.mat === 'glow' ? glowMaterial(1) : tintMaterial();
     if (K.mat !== 'world') m.setParameter('uTint', new Float32Array(K.col));
     this.matCache.set(kind, m);
     return m;
@@ -42,11 +48,12 @@ export class FX {
   burst(kind, x, y, z, n = 8, { dir = [0, 0, 0], spread = 1, power = 1 } = {}) {
     const K = KINDS[kind];
     for (let i = 0; i < n; i++) {
-      if (this.live.length >= 110) break;
+      if (this.live.length >= (this.cap || 160)) break;
       let p = this.pool.pop();
       if (!p) { const e = new pc.Entity('p'); e.addComponent('render', { meshInstances: [new pc.MeshInstance(this.meshes.chip, this.mats.world)], castShadows: false }); this.root.addChild(e); p = { e }; }
       const mi = p.e.render.meshInstances[0];
-      mi.mesh = K.round ? this.meshes.puff : K.coin ? this.meshes.disc : this.meshes.chip;
+      const ms = this.kindMeshes[kind] || this.meshes;
+      mi.mesh = K.round ? ms.puff : K.coin ? ms.disc : ms.chip;
       mi.material = this.matFor(kind);
       mi.drawOrder = K.mat === 'world' ? 0 : 95;
       const a = Math.random() * Math.PI * 2, el = (Math.random() - 0.3) * Math.PI * 0.6;

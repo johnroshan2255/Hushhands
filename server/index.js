@@ -66,7 +66,7 @@ class LoomRoom extends Room {
     switch (type) {
       case 'start':
         if (!isHost || this.run) return;
-        this.run = { seq: ++this.seq, order: this.list().map((q) => q.id), startedAt: Date.now() + 1200 };
+        this.run = { seq: ++this.seq, order: this.list().map((q) => q.id), startedAt: Date.now() + 1200, chapter: Math.max(0, Math.min(40, msg.chapter | 0)), cp: Math.max(0, Math.min(20, msg.cp | 0)), deaths: Math.max(0, msg.deaths | 0), time: Math.max(0, msg.time | 0), found: Array.isArray(msg.found) ? msg.found.slice(0, 40).map((v) => clean(v, 12)) : [] };
         this.lock();
         this.setMetadata({ ...this.metadata, phase: 'run' });
         this.broadcast('run', this.state());

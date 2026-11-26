@@ -26,10 +26,11 @@ await a.waitForFunction((n) => window.__tb.net.players.length === n, N, { timeou
 await sleep(500);
 await a.screenshot({ path: `${SHOTS}party${N}-lobby.png` });
 console.log('lobby:', await a.evaluate(() => document.getElementById('lStart').textContent), '| a guest sees:', await pages[1].evaluate(() => document.getElementById('lNote').textContent));
+if (process.env.CH) await a.evaluate((ci) => { const sel = document.getElementById('lFrom'); const o = document.createElement('option'); o.value = ci; o.textContent = ci; sel.appendChild(o); sel.value = ci; }, process.env.CH); // CH=chapter index to start from
 await a.click('#lStart');
 for (const p of pages) await p.waitForFunction((n) => window.__tb.state() === 'play' && window.__tb.game.n === n, N, { timeout: 10000 });
 await sleep(1600);
-const built = await a.evaluate(() => { const L = window.__tb.game.L; return `plates ${L.plates.filter((q) => q.id === 'g0').length}, levers ${L.levers.length}, rings ${L.rings.length}, glass carries ${L.slabs[0].cap}`; });
+const built = await a.evaluate(() => { const L = window.__tb.game.L; return `plates ${L.plates.filter((q) => q.id === 'g0').length}, levers ${L.levers.length}, rings ${L.rings.length}, chapter ${L.num} ${L.name}`; });
 console.log(`the Loom for ${N}: ${built}`);
 if (from) {
   await a.evaluate((cp) => { const { game } = window.__tb; for (const g of game.L.gates) if (game.L.cps[cp].x > g.x) game.W.open[g.id] = true; game.W.cp = cp; game.kill(-1, 'retry', 0, 0); }, from);
@@ -51,6 +52,7 @@ for (;;) {
   const failed = s.map((q, i) => (q.failed ? `${'ABCD'[i]}: ${q.failed}` : '')).filter(Boolean).join('; ');
   if (failed || Date.now() - t0 > limit) {
     for (let i = 0; i < N; i++) await pages[i].screenshot({ path: `${SHOTS}party${N}-fail${'ABCD'[i]}.png` });
+    if (process.env.PROBE) for (const p of pages) console.log(await p.evaluate(process.env.PROBE));
     console.log(`FAIL: ${failed || 'out of time'} at lantern ${s[0].cp}; ${s.map((q, i) => `${'ABCD'[i]} x=${q.x.toFixed(1)} y=${q.y.toFixed(1)}`).join(', ')}; ${s[0].deaths} deaths`, pages.flatMap((p) => p.errors).slice(0, 5));
     await browser.close(); process.exit(1);
   }
