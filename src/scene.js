@@ -146,6 +146,7 @@ export class Scene {
     this.rng = mulberry32(7717 + L.n * 13);
     this.lit = []; // amber lights from props, refreshed each frame
     this.buildStatic();
+    this.buildRooms();
     this.buildProps();
     this.buildShafts();
   }
@@ -189,6 +190,22 @@ export class Scene {
   add(fn, mat = this.M.world, order) { const m = this.mesh(fn); return m ? ent(this.root, m, mat, 0, 0, 0, order) : null; }
   destroy() { this.root.destroy(); for (const m of this.own) { m.decRefCount(); if (m.refCount < 1) m.destroy(); } this.own.length = 0; }
 
+  /** rooms: their walls built in their own frame, about their centre, so the whole room can turn */
+  buildRooms() {
+    this.rooms = {};
+    for (const r of this.L.rooms) {
+      const piv = new pc.Entity(`room ${r.id}`); piv.setLocalPosition(r.cx, r.cy, 0); this.root.addChild(piv);
+      const m = this.mesh((mb) => {
+        for (const s of r.solids) rounded(mb, s.x0 - r.cx, s.x1 - r.cx, s.y0 - r.cy, s.y1 - r.cy, -3.2, 2.4, (t) => ink(0.75 + 0.5 * t), this.rng);
+        // the drum's ribs, behind: so a turn is seen
+        for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2, R = Math.max(r.x1 - r.x0, r.y1 - r.y0) * 0.55; addBeam(mb, 0, 0, Math.cos(a) * R, Math.sin(a) * R, -4.5, 0.25, 0.3, ink()); }
+        addAnnulus(mb, 0, 0, -4.6, Math.max(r.x1 - r.x0, r.y1 - r.y0) * 0.53, Math.max(r.x1 - r.x0, r.y1 - r.y0) * 0.56, 40, 0.4, ink());
+      });
+      if (m) ent(piv, m, this.M.world);
+      this.rooms[r.id] = piv;
+    }
+  }
+  setRoom(id, angle) { const p = this.rooms && this.rooms[id]; if (p) p.setLocalEulerAngles(0, 0, angle * 57.2958); }
   /** the ground's height under x (the top of the highest walkable ground there), or null over a drop */
   groundY(x) {
     let best = null;

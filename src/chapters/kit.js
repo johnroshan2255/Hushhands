@@ -31,8 +31,14 @@ export function kit(n, meta = {}) {
   const other = (pts, o = {}) => L.others.push({ pts, ...o });
   /** a body left by an earlier doll, its thread still faintly lit */
   const deadDoll = (x, y, o = {}) => L.bodiesOf.push({ x, y, ...o });
+  /** a room with its own frame: build its walls with r.solid (frame coordinates = world ones when upright) */
+  const room = (o) => {
+    const r = { solids: [], kill: [], rot0: 0, ...o, cx: (o.x0 + o.x1) / 2, cy: (o.y0 + o.y1) / 2 };
+    L.rooms.push(r);
+    return { r, solid: (x0, y0, x1, y1, q = {}) => { r.solids.push({ x0, y0, x1, y1, ...q }); }, kill: (x0, y0, x1, y1, why = 'fell') => r.kill.push({ x0, y0, x1, y1, why }) };
+  };
   const solo = n === 1;
-  return { L, n, nb, solo, solid, ground, cp, gate, platesAt, deco, hint, zone, begin, exit, button, other, deadDoll };
+  return { L, n, nb, solo, room, solid, ground, cp, gate, platesAt, deco, hint, zone, begin, exit, button, other, deadDoll };
 }
 
 /** after building: the level's left and right ends, and the scene's drawing range */

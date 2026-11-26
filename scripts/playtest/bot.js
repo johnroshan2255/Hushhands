@@ -525,6 +525,59 @@
     if (solo()) yield* callSpool();
     yield* toExit();
   };
+  // ---- the Upturned Loom: walking in a room's own left and right; holding fast through its turns
+  /** to frame x fx in room id; o: { hop(fdir, f), sneak(f), brace: hold fast when it groans, until() } */
+  function* roomWalk(id, fx, o = {}) {
+    for (let i = 0; ; i++) {
+      chk();
+      if (i > 60 * 90) throw new Error(`stuck in room ${id}`);
+      const R = G.roomInfo(id), r = R.r, B = b();
+      if (o.until && o.until(R)) break;
+      if (o.brace !== false && (R.turning || R.warn != null) && R.inside) { release('KeyD'); release('KeyA'); release('Space'); release('KeyS'); hold('ShiftLeft'); yield; continue; }
+      release('ShiftLeft');
+      const f = R.rot ? 2 * r.cx - B.x : B.x;
+      if (Math.abs(f - fx) < 0.25 && !o.until) break;
+      if (o.until && Math.abs(f - fx) < 0.45) { release('KeyD'); release('KeyA'); yield; continue; }
+      const fdir = Math.sign(fx - f);
+      const wdir = R.inside ? fdir : Math.sign((R.rot ? 2 * r.cx - fx : fx) - B.x);
+      hold(wdir > 0 ? 'KeyD' : 'KeyA'); release(wdir > 0 ? 'KeyA' : 'KeyD');
+      if (o.sneak && R.inside && o.sneak(f)) hold('KeyS'); else release('KeyS');
+      if (R.inside && o.hop && B.ground && o.hop(fdir, f)) { hold('Space'); } else if (B.ground) release('Space');
+      yield;
+    }
+    releaseAll();
+  }
+  S['upturned:0'] = function* () {
+    yield* walkTo(23.4, { wait: false });
+    yield* roomWalk('hall', 23.2, { sneak: (f) => f > 42.4 && f < 45.6, hop: (d, f) => d < 0 && f - 38 > 0.35 && f - 38 < 0.75 });
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.8);
+  };
+  S['upturned:1'] = function* () {
+    yield* gather();
+    const V = L().levers.filter((l) => l.id === 'drum'), v = solo() ? V[0] : V[role() % V.length];
+    yield* walkTo(v.x, { wait: false, tol: 0.2 });
+    hold('KeyE');
+    yield* until(() => W().open.drum, 60 * 20, 'every lever');
+    release('KeyE');
+    say('the drum is turning');
+    hold('ShiftLeft');
+    yield* until(() => G.roomInfo('drum').n >= 1 && !G.roomInfo('drum').turning, 60 * 10, 'the turn');
+    release('ShiftLeft');
+    say('turned');
+    yield* roomWalk('drum', 71.2, { brace: false });
+    yield* walkTo(L().cps[2].x + 0.6 - role() * 0.8, { wait: false });
+  };
+  S['upturned:2'] = function* () {
+    yield* gather();
+    // in only the right way up, and not just before it turns
+    yield* until(() => { const R = G.roomInfo('gallery'); return R.rot === 0 && !R.turning && R.warn == null; }, 60 * 20, 'the gallery the right way up');
+    const hop = (d, f) => [[110, 111.6], [122, 123.6]].some(([a, c]) => (d > 0 ? a - f : f - c) > 0.35 && (d > 0 ? a - f : f - c) < 0.75);
+    yield* roomWalk('gallery', 132.6, { hop });
+    say('across the gallery');
+    yield* roomWalk('gallery', 133, { hop, until: (R) => R.rot === 0 && !R.turning && R.warn == null });
+    yield* roomWalk('gallery', 135.2, { hop, brace: true });
+    yield* toExit();
+  };
   S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }

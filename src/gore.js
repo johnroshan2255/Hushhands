@@ -44,7 +44,7 @@ export class Gore {
     const dev = this.app.graphicsDevice, D = dollMeshes(dev, o.variant || 0);
     const f = o.facing || 1;
     const P = REST.map(([x, y]) => ({ x: o.x + x * f, y: o.y + y, px: o.x + x * f - (o.vx || 0) / 60, py: o.y + y - (o.vy || 0) / 60 }));
-    const body = { P, sticks: STICKS.map(([a, b]) => ({ a, b, l: Math.hypot(REST[a][0] - REST[b][0], REST[a][1] - REST[b][1]), on: true })), t: 0, sleep: 0, why: o.why, solids: o.solids, open: o.open, water: o.water || null, gone: false };
+    const body = { g: o.g || 1, P, sticks: STICKS.map(([a, b]) => ({ a, b, l: Math.hypot(REST[a][0] - REST[b][0], REST[a][1] - REST[b][1]), on: true })), t: 0, sleep: 0, why: o.why, solids: o.solids, open: o.open, water: o.water || null, gone: false };
     // its pieces: each hangs from one point toward another
     const e = new pc.Entity('body'); this.root.addChild(e);
     const piece = (mesh, a, b, up = false, sc = 1) => {
@@ -139,7 +139,7 @@ export class Gore {
       for (const p of P) {
         const vx = (p.x - p.px) * 0.995, vy = (p.y - p.py) * 0.995;
         p.px = p.x; p.py = p.y;
-        let g = G;
+        let g = G * B.g;
         if (B.drown) { g = B.t < 3 ? 3 : 1.5; if (p.y > B.drown.level - 0.2) g = 8; }
         p.x += B.drown ? vx * 0.9 : vx; p.y += (B.drown ? vy * 0.9 : vy) - g * h * h;
         moved += Math.abs(vx) + Math.abs(vy);

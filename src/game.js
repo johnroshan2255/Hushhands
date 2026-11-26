@@ -14,6 +14,7 @@ import { newMonster, thinkMonster, packMonster, unpackMonster, viewFor } from '.
 import { unlatch, DRAIN } from './creatures/drinker.js';
 import { RatsView, litAt } from './creatures/rats.js';
 import { GRUB } from './creatures/puppeteer.js';
+import { roomAt, roomState, flip, spin, frameSpace, TURN, WARN } from './rooms.js';
 import { FX } from './fx.js';
 import { Gore } from './gore.js';
 
@@ -91,7 +92,8 @@ export class Game {
     this.W = { open: { ...open }, plates: [], levers: [], traps: [], slabs: [], wake: 0, scream: false, wT0: {}, wl: L.waters.map((w) => w.y0), cp: Math.min(cp, L.cps.length - 1), rings: [], won: 0, phase: 'play', deaths, cut, epoch: 0, tripped, bell: {}, found: [...found], exitT: 0 };
     for (const g of L.gates) if (g.startOpen && open[g.id] === undefined) this.W.open[g.id] = true;
     this.drainAt = {}; this.eelBeat = {}; this.pushT = 0; this.ratT = 0; this.squealT = 0;
-    this.W.swarm = []; this.W.blooms = []; this.W.meat = [];
+    this.W.swarm = []; this.W.blooms = []; this.W.meat = []; this.W.turnAt = {};
+    this.roomWarned = {}; this.camRoll = 0;
     this.pressBeats = L.presses.map(() => null);
     for (const l of L.lamps) { l.by = -1; l.x = l.x0 ?? l.x; l.y = l.y0 ?? l.y; l.x0 = l.x; l.y0 = l.y; }
     this.rats = L.swarms.length || L.waters.some((w) => w.look === 'rats') ? new RatsView(app, L, this.low ? 0 : 2) : null;
@@ -185,6 +187,7 @@ export class Game {
     W.slabs = m.sl; W.wake = m.wk; W.wT0 = m.w0 || {}; W.cp = Math.max(W.cp, m.cp); W.deaths = m.d;
     if (m.cr) m.cr.forEach((c, i) => { const k = L.crates[i]; if (k) { k.tx = c[0]; k.ty = c[1]; } });
     if (m.sw != null) W.swarm = unbits(m.sw, L.swarms.length);
+    if (m.ta) W.turnAt = m.ta;
     if (m.bl != null) W.blooms = unbits(m.bl, L.blooms.length);
     if (m.mt) W.meat = m.mt;
     if (m.lp) m.lp.forEach((a, i) => { const l = L.lamps[i]; if (l) { l.by = a[2]; if (l.by < 0) { l.x = a[0]; l.y = a[1]; } } });
@@ -296,6 +299,12 @@ export class Game {
       if (ps.length + ls.length === 0) continue;
       if (ps.every(([, i]) => W.plates[i]) && ls.every(([, i]) => W.levers[i])) { W.open[g.id] = true; this.emit({ t: 'gate', id: g.id }); }
     }
+    // levers and plates with no gate of their own (a drum, the strings): the same rule, all at once
+    for (const id of new Set([...L.levers.map((l) => l.id), ...L.plates.map((q) => q.id)])) {
+      if (W.open[id] || L.gates.some((g) => g.id === id)) continue;
+      const ps = L.plates.map((q, i) => [q, i]).filter(([q]) => q.id === id), ls = L.levers.map((l, i) => [l, i]).filter(([l]) => l.id === id);
+      if (ps.every(([, i]) => W.plates[i]) && ls.every(([, i]) => W.levers[i])) { W.open[id] = true; this.emit({ t: 'gate', id }); }
+    }
     // the next lantern
     const next = L.cps[W.cp + 1];
     if (next && bodies.some((b) => b.real && !b.dead && b.x >= next.x - 0.6 && Math.abs(b.y - next.y) < 3)) { W.cp++; this.emit({ t: 'cp', k: W.cp }); }
@@ -308,6 +317,8 @@ export class Game {
       if (T - t0 > ROT) { delete H.rot[k]; this.kill(i, 'rot', p.b.x, p.b.y); return; }
       for (const j of [i - 1, i + 1]) { const q = this.players[j]; if (!q || q.b.dead || H.rot[j] != null) continue; if (T - t0 > Math.hypot(q.b.x - p.b.x, q.b.y - p.b.y) / ROT_SPEED + 0.6) { H.rot[j] = T; this.emit({ t: 'rot', who: j, on: true, t0: T, from: i }); } }
     }
+    // a drum set turning by its lever: once
+    for (const r of L.rooms) if (r.lever && W.open[r.lever] && W.turnAt[r.id] == null) { W.turnAt[r.id] = T + WARN; this.emit({ t: 'turnAt', id: r.id, t0: W.turnAt[r.id] }); }
     // grubs fall off in time; the Puppeteer falls when its strings are cut
     for (const [k, until] of Object.entries(H.grub)) if (until <= T) { delete H.grub[k]; this.emit({ t: 'grub', who: +k, on: false }); }
     this.mon.forEach((m, mi) => { if (m.kind === 'puppeteer' && m.mode === 'watch' && L.monsters[mi].gate && W.open[L.monsters[mi].gate]) { m.mode = 'fallen'; this.emit({ t: 'pfall', mi }); } });
@@ -362,7 +373,7 @@ export class Game {
     if (H.snapT <= 0 && this.net.online) {
       H.snapT = 0.1;
       this.snapX = L.crates.length ? L.crates.map((c) => [Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100]) : undefined;
-      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX, sw: L.swarms.length ? bits(W.swarm) : undefined, bl: L.blooms.length ? bits(W.blooms) : undefined, mt: L.meat.length ? W.meat.slice() : undefined, lp: L.lamps.length ? L.lamps.map((l) => [Math.round(l.x * 100) / 100, Math.round(l.y * 100) / 100, l.by]) : undefined });
+      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX, ta: L.rooms.length ? W.turnAt : undefined, sw: L.swarms.length ? bits(W.swarm) : undefined, bl: L.blooms.length ? bits(W.blooms) : undefined, mt: L.meat.length ? W.meat.slice() : undefined, lp: L.lamps.length ? L.lamps.map((l) => [Math.round(l.x * 100) / 100, Math.round(l.y * 100) / 100, l.by]) : undefined });
     }
   }
 
@@ -375,6 +386,7 @@ export class Game {
       case 'gate': { W.open[e.id] = true; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.burst('dust', g.x + 0.35, g.y + 0.2, 0.5, 10, { spread: 1.2 }); fx.shake(0.35); } break; }
       case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
       case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
+      case 'turnAt': W.turnAt[e.id] = e.t0; break;
       case 'grub': { const p = this.players[e.who]; if (!p) break; p.grub = e.on; if (e.on) { sfx.play('squirm', { x: p.b.x, vol: 1.2 }); sfx.play('clack', { x: p.b.x }); fx.burst('ink', p.b.x, p.b.y + 1.1, 0.3, 6, { power: 0.5 }); if (p.me) { this.hud.flash('#2b2b20', 0.45, 160); fx.shake(0.3); } } else { sfx.play(e.how === 'burn' ? 'flame' : 'squirm', { x: p.b.x }); fx.burst(e.how === 'burn' ? 'ember' : 'ink', p.b.x, p.b.y + 1.1, 0.3, 12, { power: 0.8 }); } break; }
       case 'pfall': { const m = this.mon[e.mi]; if (m) m.mode = 'fallen'; sfx.play('snip', { x: m?.x }); sfx.play('crash', { x: m?.x }); sfx.play('groan', { x: m?.x, vol: 1.5 }); fx.shake(1); this.swing = 1; for (const p of this.players) p.grub = false; break; }
       case 'meat': { W.meat[e.k] = e.state; const q = L.meat[e.k]; if (e.state === 1) { sfx.play('land', { x: q.x, vol: 1 }); sfx.play('squelch', { x: q.x }); fx.shake(0.2); } else { sfx.play('chomp', { x: q.x }); fx.burst(q.poison ? 'spore' : 'dye', q.x, q.y + 0.4, 0.3, 14, { power: 1 }); } break; }
@@ -465,7 +477,8 @@ export class Game {
       // the doll stops being a doll: a body, where it fell, for the rest of the chapter
       if (e.why !== 'caged' && e.why !== 'retry' && !p.hid) {
         const wi = L.waters.findIndex((w) => x > w.x0 && x < w.x1 && W.wl[w.i] > y);
-        this.gore.spawn({ x, y, facing: b.facing, vx: b.vx, vy: b.vy, variant: p.slot, why: e.why === 'worm' ? 'taken' : e.why, solids: L.solids, open: (s) => this.space.open(s), fx, level: wi >= 0 ? W.wl[wi] : null });
+        const inRoom = roomAt(L, x, y);
+        this.gore.spawn({ x, y, facing: b.facing, vx: b.vx, vy: b.vy, variant: p.slot, why: e.why === 'worm' ? 'taken' : e.why, solids: inRoom ? L.solids.concat(this.roomBoxes(this.T())) : L.solids, open: (s) => this.space.open(s), fx, level: wi >= 0 ? W.wl[wi] : null, g: Math.cos(b.ang || 0) < 0 ? -1 : 1 });
         p.hid = true;
         if (e.why === 'fell' || e.why === 'water') { /* the body goes on, the camera stays */ }
       }
@@ -489,7 +502,8 @@ export class Game {
     for (const w of this.L.waters) if (w.lock && !(w.drain && W.open[w.drain])) W.open[w.lock] = true;
     for (const c of this.L.crates) { const keep = c.x0 < this.L.cps[e.cp].x - 1 && c.x > this.L.cps[e.cp].x; if (!keep) { c.x = c.x0; c.y = c.y0; c.vx = c.vy = 0; c.tx = c.ty = undefined; } }
     this.drainAt = {}; this.eelBeat = {}; this.ratT = 0; W.swarm = []; W.blooms = []; W.meat = [];
-    for (const p of this.players) { p.rot = null; p.grub = false; }
+    for (const p of this.players) { p.rot = null; p.grub = false; p.b.hold = null; p.b.flungY = null; }
+    for (const r of this.L.rooms) if (r.lever && this.L.cps[e.cp].x < r.x0) { W.turnAt[r.id] = null; W.open[r.lever] = false; }
     if (this.host) this.host.rot = {};
     const cpx = this.L.cps[e.cp].x;
     for (const l of this.L.lamps) { if (!(l.x0 < cpx - 1 && l.x > cpx - 3 && l.by < 0)) { l.x = l.x0; l.y = l.y0; } l.by = -1; }
@@ -548,12 +562,14 @@ export class Game {
       if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); else { const g = this.players.find((p) => !p.me && p.latched != null && !p.b.dead && Math.abs(p.b.x - b.x) < 1.4 && Math.abs(p.b.y - b.y) < 1.5); if (g) this.intent({ t: 'pull', k: g.i }); } }
       const links = W.phase === 'play' ? this.linksFor(this.meIdx) : [];
       if (b.dead || b.caged) this.deadBody(me, dt);
-      else stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0 });
+      else { const rm = b.hold ? L.rooms.find((r) => r.id === b.holdRoom) : roomAt(L, b.x, b.y); if (rm) this.stepInRoom(rm, b, inp, dt, links, T); else { b.ang = 0; b.waist = WAIST; stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0 }); } }
       this.mud(b, dt);
       if (can && !b.dead) { this.breathe(b, dt); this.pushCrates(b, inp, dt); this.rotting(b, dt, T); }
       if (b.ground && Math.abs(b.vx) > 0.3 && L.creaky.some((c) => b.x > c.x0 && b.x < c.x1)) { b.noise = Math.max(b.noise, 0.5); if ((this.creakT = (this.creakT || 0) - dt) <= 0) { this.creakT = 0.5 + Math.random() * 0.5; this.sfx.play('creak', { x: b.x, vol: 0.5 }); } }
       b.hidden = !b.dead && b.ground && b.sneak && Math.abs(b.vx) < 0.2 && L.sacks.some((s) => Math.abs(b.x - s.x) < (s.w || 0.9) / 2 && Math.abs(b.y - s.y) < 0.4);
-      if (this.spool) this.stepSpoolAll(dt, can);
+      if (this.spool) { const s = this.spool; if (roomAt(L, s.x, s.y) || roomAt(L, b.x, b.y)) { s.mode = 'follow'; const c = Math.cos(b.ang || 0); s.x = b.x - b.facing * 0.55; s.y = b.y + (c < 0 ? -0.35 : 0.05); s.vx = s.vy = 0; } else this.stepSpoolAll(dt, can); }
+      // the others' turn in the world: which way up they are, for their thread and their drawing
+      for (const p of this.players) { if (p.me) continue; const q = p.b, r = roomAt(L, q.x, q.y); if (r) { const st = roomState(r, T, W.turnAt[r.id]); q.ang = st.turning ? (q.braced ? st.angle : st.from * Math.PI) : st.rot * Math.PI; } else q.ang = 0; q.waist = WAIST * Math.cos(q.ang); }
       me.use = can && input.held('use') && this.nearLever(b) >= 0;
       // ---- the others, eased toward where they say they are
       const now = performance.now();
@@ -655,6 +671,38 @@ export class Game {
     return { x, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
   }
 
+  /** am I in a room that is about to turn, or turning? */
+  inTurningRoom(b) { const r = b.hold ? this.L.rooms.find((q) => q.id === b.holdRoom) : roomAt(this.L, b.x, b.y); if (!r || !(r.period || r.lever)) return false; const st = roomState(r, this.T(), this.W.turnAt[r.id]); return st.warn != null || st.turning; }
+  /** how a room stands now (for the playtests) */
+  roomInfo(id) { const r = this.L.rooms.find((q) => q.id === id); return r ? { ...roomState(r, this.T(), this.W.turnAt[id]), r, inside: roomAt(this.L, this.me.b.x, this.me.b.y) === r || (!!this.me.b.hold && this.me.b.holdRoom === id) } : null; }
+  /** a step inside a room: in its frame (where down is its floor); through a turn, held or flung */
+  stepInRoom(rm, b, inp, dt, links, T) {
+    const st = roomState(rm, T, this.W.turnAt[rm.id]);
+    if (st.turning) {
+      if (b.hold == null) { b.holdRoom = rm.id; b.hold = b.braced || inp.brace ? 'frame' : 'world'; [b.fx, b.fy] = flip(rm, st.from, b.x, b.y); b.ax = b.x; b.ay = b.y; b.angFrom = st.from * Math.PI; }
+      if (b.hold === 'frame' && !inp.brace) { b.hold = 'world'; b.ax = Math.max(rm.x0 + 0.8, Math.min(rm.x1 - 0.8, b.x)); b.ay = Math.max(rm.y0 + 0.8, Math.min(rm.y1 - 1.2, b.y)); b.angFrom = b.ang; } // (let go part way: it stays, within the walls) // let go part way: it stays where it is now
+      if (b.hold === 'frame') { [b.x, b.y] = spin(rm, st.angle - st.from * Math.PI, ...flip(rm, st.from, b.fx, b.fy)); b.ang = st.angle; b.braced = true; b.ground = true; }
+      else { b.x = b.ax; b.y = b.ay; b.ang = b.angFrom; b.braced = false; b.ground = false; }
+      b.vx = 0; b.vy = 0; b.waist = WAIST * Math.cos(b.ang);
+      return;
+    }
+    if (b.hold) { if (b.hold === 'world') b.flungY = flip(rm, st.rot, b.x, b.y)[1]; b.hold = null; b.ground = false; }
+    const s = st.rot ? -1 : 1;
+    [b.x, b.y] = flip(rm, st.rot, b.x, b.y); b.vx *= s; b.vy *= s; b.facing *= s;
+    const fl = st.rot ? links.map((o) => ({ ...o, x: 2 * rm.cx - o.x, y: 2 * rm.cy - o.y, vx: -(o.vx || 0), vy: -(o.vy || 0), waist: -(o.waist ?? WAIST) })) : links;
+    stepPlayer(b, inp, dt, frameSpace(rm), fl, null);
+    // a fall measured in the room's own up and down: a turn you did not hold through
+    if (b.flungY != null && b.ground) { const fall = b.flungY - b.y; b.flungY = null; if (fall > 4.2) { this.toWorld(rm, st, b, s); return this.die('turn'); } }
+    for (const k of rm.kill) if (b.x > k.x0 && b.x < k.x1 && b.y > k.y0 && b.y < k.y1) { this.toWorld(rm, st, b, s); return this.die(k.why || 'fell'); }
+    this.toWorld(rm, st, b, s);
+  }
+  toWorld(rm, st, b, s) { [b.x, b.y] = flip(rm, st.rot, b.x, b.y); b.vx *= s; b.vy *= s; b.facing *= s; b.ang = st.rot * Math.PI; b.waist = WAIST * Math.cos(b.ang); }
+  /** every room's boxes as the world sees them now (for the thread to lie on, and bodies to fall on) */
+  roomBoxes(T) {
+    const out = [];
+    for (const r of this.L.rooms) { const st = roomState(r, T, this.W.turnAt[r.id]); if (st.turning) continue; for (const s of r.solids) { const [ax, ay] = flip(r, st.rot, s.x0, s.y0), [bx2, by] = flip(r, st.rot, s.x1, s.y1); out.push({ x0: Math.min(ax, bx2), x1: Math.max(ax, bx2), y0: Math.min(ay, by), y1: Math.max(ay, by) }); } }
+    return out;
+  }
   /** a Drinker is on me: I can't move; I hammer JUMP to shake it (a friend can tear it off) */
   drunk(dt) {
     const b = this.me.b, input = this.input;
@@ -745,6 +793,7 @@ export class Game {
     const { L, W } = this, b = this.me.b;
     if (b.dead || this.dying) return;
     const h = b.sneak ? HT_LOW : HT;
+    if (b.y < -70) return this.die('fell'); // (out of the world altogether)
     for (const k of L.kill) if (b.x > k.x0 && b.x < k.x1 && b.y < k.y1 && b.y > k.y0) return this.die(k.why);
     for (let i = 0; i < L.traps.length; i++) { const t = L.traps[i]; if (!W.traps[i] && b.ground && Math.abs(b.x - t.x) < 0.4 && Math.abs(b.y - t.y) < 0.15) return this.die('trap', i); }
     for (const w of L.worms) {
@@ -801,6 +850,7 @@ export class Game {
       if (this.latchT > 0) key = 'latched';
       else if (this.me.rot != null) key = 'rotting';
       else if (this.me.grub) key = 'grubbed';
+      else if (this.inTurningRoom(b)) key = 'holdfast';
       else if (this.wormT > 0) key = 'wormed';
       else { const f = this.players.find((p) => !p.me && p.wormed && Math.abs(p.b.x - b.x) < 9); if (f) { key = 'friendWormed'; vars = { name: f.name }; } const g = this.players.find((p) => !p.me && p.latched != null && Math.abs(p.b.x - b.x) < 9); if (g) { key = 'friendLatched'; vars = { name: g.name }; } }
       const carry = this.L.lamps.findIndex((l) => l.by === this.meIdx);
@@ -871,9 +921,11 @@ export class Game {
       let rx = b.x, ry = b.y, tilt = 0;
       if (b.hang && !b.dead) { const o = this.anchorOf(p); if (o) { tilt = clamp(Math.atan2(-(o[0] - b.x), o[1] - (b.y + WAIST)) * 0.75, -0.9, 0.9); rx = b.x + Math.sin(tilt) * WAIST; ry = b.y + WAIST - Math.cos(tilt) * WAIST; } }
       p.tilt = (p.tilt || 0) + (tilt - (p.tilt || 0)) * Math.min(1, dt * 10);
-      p.rig.pose(dt, { x: rx, y: ry, z: 0, facing: b.facing, speed: Math.abs(b.vx) / SCALE, vx: b.vx, vy: b.vy, crouch: b.sneak, anim, t: time + p.i * 1.7, noShadow: true });
+      const up = Math.cos(b.ang || 0) < 0 ? -1 : 1;
+      p.rig.pose(dt, { x: rx, y: ry, z: 0, facing: b.facing * up, speed: Math.abs(b.vx) / SCALE, vx: b.vx, vy: b.vy, crouch: b.sneak, anim, t: time + p.i * 1.7, noShadow: true });
       if (Math.abs(p.tilt) > 0.01) p.rig.root.rotate(0, 0, p.tilt * 57.3);
-      const kx = b.x, ky = b.y + (b.sneak ? 0.36 : WAIST);
+      if (b.ang) p.rig.root.rotate(0, 0, b.ang * 57.2958);
+      const wl = b.sneak ? 0.36 : WAIST, kx = b.x - Math.sin(b.ang || 0) * wl, ky = b.y + Math.cos(b.ang || 0) * wl;
       const dark = p.me ? b.dark > 0 : !!p.dark;
       p.halo.enabled = !p.hid && !dark;
       p.halo.setLocalPosition(kx, ky, 0.3);
@@ -903,7 +955,7 @@ export class Game {
     }
     // ---- the thread (and the spool)
     const ends = [];
-    const knot = (p) => [p.b.x, p.b.y + (p.b.sneak ? 0.36 : WAIST) + 0.02];
+    const knot = (p) => { const a = p.b.ang || 0, w = (p.b.sneak ? 0.36 : WAIST) + 0.02; return [p.b.x - Math.sin(a) * w, p.b.y + Math.cos(a) * w]; };
     if (this.spool) {
       this.spoolView.update(dt, this.spool, T);
       const [sx, sy] = this.spoolView.knot(this.spool), [ax, ay] = knot(me);
@@ -918,7 +970,16 @@ export class Game {
         { const d = Math.hypot(bx - ax, by - ay); ends.push({ ax, ay, bx, by, len: clamp(d * 1.12 + 0.3, d, Math.max(d, linkLen(p.b, q.b))) }); }
       }
     }
-    this.threads.update(dt, ends, L.solids, (s) => this.space.open(s));
+    this.threads.update(dt, ends, L.rooms.length ? L.solids.concat(this.roomBoxes(T)) : L.solids, (s) => this.space.open(s));
+    // the rooms, turned; a groan before each turn, dust falling the wrong way, the shake as it goes
+    for (const r of L.rooms) {
+      const st = roomState(r, T, W.turnAt[r.id]);
+      scene.setRoom(r.id, st.angle);
+      const near = Math.abs((r.x0 + r.x1) / 2 - this.cam.x) < (r.x1 - r.x0) / 2 + 12;
+      if (st.warn != null && near && this.roomWarned[r.id] !== st.n) { this.roomWarned[r.id] = st.n; sfx.play('drum', { x: (r.x0 + r.x1) / 2 }); fx.shake(0.3); }
+      if (st.warn != null && near && live && Math.random() < dt * 18) fx.burst('dust', r.x0 + Math.random() * (r.x1 - r.x0), r.y0 + 1, 0.3, 1, { dir: [0, 0.8, 0], power: 0.5 });
+      if (st.turning && near) fx.shake(0.25);
+    }
     // ---- the hunters
     this.mon.forEach((m, i) => {
       const v = this.monViews[i];
@@ -975,7 +1036,10 @@ export class Game {
     th *= 1 - 0.12 * this.dreadK; // fear narrows the view
     const groundAt = this.attract ? (tall ? 0.14 : 0.2) : tall ? 0.36 : this.input.usedTouch ? 0.24 : 0.19; // how far up the screen the ground sits
     const tx = (x0 + x1) / 2 + lead + (this.attract && !tall ? 3.6 : 0);
-    let ty = (y0 + y1) / 2 + th * (0.5 - groundAt);
+    // in a room hung upside down the camera turns over with you
+    const rollTo = me.b.ang || 0;
+    this.camRoll += (rollTo - this.camRoll) * Math.min(1, dt * (me.b.hold ? 30 : 4));
+    let ty = (y0 + y1) / 2 + th * (0.5 - groundAt) * Math.cos(this.camRoll);
     if (W.phase === 'won') ty += W.won * 4;
     const ck = 1 - Math.exp(-dt * 3.2), cky = 1 - Math.exp(-dt * (ty < this.cam.y - 1.5 ? 4 : 1.9));
     this.cam.x += (tx - this.cam.x) * ck; this.cam.y += (ty - this.cam.y) * cky; this.cam.h += (th - this.cam.h) * (1 - Math.exp(-dt * 1.8));
@@ -984,7 +1048,7 @@ export class Game {
     this.drawStrings(dt);
     const [shx, shy] = fx.shakeOffset(time);
     cam.setPosition(this.cam.x + shx, this.cam.y + shy, dist);
-    cam.setEulerAngles(0, 0, this.swing > 0 ? Math.sin(this.swing * 9) * this.swing * 22 : 0);
+    cam.setEulerAngles(0, 0, this.camRoll * 57.2958 + (this.swing > 0 ? Math.sin(this.swing * 9) * this.swing * 22 : 0));
     cam.camera.farClip = dist + 140; cam.camera.nearClip = Math.max(1, dist - 14);
     sfx.listenerX = this.cam.x;
     R.setLights(lights, this.cam.x, this.cam.y - 1.5);

@@ -55,6 +55,11 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Upturned Loom
+  upside: ['Here the halls hang from the roof. Walk on.', 'Here the halls hang from the roof. Walk on.'],
+  drum: [`The lever turns the whole hall over. Hold ${K('SHIFT')} as it turns, or fall its height`, 'The lever turns the whole hall over. Press HOLD as it turns, or fall its height'],
+  gallery: [`This one turns on its own. When it groans, hold ${K('SHIFT')}`, 'This one turns on its own. When it groans, press HOLD'],
+  holdfast: [`IT IS TURNING. HOLD ${K('SHIFT')}`, 'IT IS TURNING. PRESS HOLD'],
   // the Theatre
   eye: ['Something watches the stage. Do not stand in its light', 'Something watches the stage. Do not stand in its light'],
   grubbed: [`A GRUB HAS YOUR STRINGS. Left is right, ${K('S')} jumps, ${K('SPACE')} creeps. A flame burns it off`, 'A GRUB HAS YOUR STRINGS. Left is right, down jumps, JUMP creeps. A flame burns it off'],
@@ -133,7 +138,7 @@ async function boot() {
   const renderHint = () => {
     const el = $('hint'), ti = touchUI ? 1 : 0;
     let html = hintKey && HINTS[hintKey] ? HINTS[hintKey][ti].replace('{name}', () => esc(hintVars.name || '')) : '';
-    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed');
+    el.classList.toggle('urgent', hintKey === 'wormed' || hintKey === 'friendWormed' || hintKey === 'kNear' || hintKey === 'kStill' || hintKey === 'latched' || hintKey === 'friendLatched' || hintKey === 'rotting' || hintKey === 'grubbed' || hintKey === 'holdfast');
     if (!touchUI && useLabel && !(hintKey && /E<\/kbd>/.test(html))) html = html ? `${html} &nbsp;·&nbsp; ${K('E')} ${USES[useLabel]}` : `${K('E')} ${USES[useLabel]}`;
     el.hidden = !html || state !== 'play';
     if (html) el.innerHTML = html;
