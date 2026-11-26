@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#8f9a97" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="description" content="The Thread-Bearers: one to four small sackcloth wanderers, tied together by a glowing thread, crossing a dark loom of traps, worms and blind giants. Alone or with friends." />
+  <title>The Thread-Bearers</title>
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="./src/style.css" />
+</head>
+<body>
+  <canvas id="app" tabindex="0"></canvas>
+  <div id="grain" aria-hidden="true"></div>
+  <div class="vig" aria-hidden="true"></div>
+  <div id="tags" aria-hidden="true"></div>
+
+  <!-- ============ in play ============ -->
+  <div id="hud" hidden>
+    <button id="bPause" class="round" aria-label="Pause"><i></i><i></i></button>
+    <div id="roomChip" hidden></div>
+    <div id="card" aria-live="polite"><b id="cardT"></b><span id="cardS"></span></div>
+    <div id="hint" hidden></div>
+    <div id="toast" hidden></div>
+  </div>
+  <div id="touch" hidden>
+    <div id="stick"><div id="stickKnob"></div></div>
+    <button class="tb use" data-act="use" id="tUse" hidden>USE</button>
+    <button class="tb brace" data-act="brace">HOLD</button>
+    <button class="tb jump" data-act="jump">JUMP</button>
+  </div>
+  <div id="fade" aria-hidden="true"></div>
+
+  <!-- ============ title ============ -->
+  <section id="menu" class="screen" hidden>
+    <div class="title">
+      <small>THE</small>
+      <h1>THREAD&#8209;BEARERS</h1>
+      <svg class="thread" viewBox="0 0 400 26" aria-hidden="true"><path d="M2 8 C 70 30, 130 -6, 200 13 S 330 28, 398 9" /><circle cx="200" cy="13" r="4.2" /></svg>
+      <p>one thread &nbsp;·&nbsp; one to four small wanderers</p>
+    </div>
+    <nav class="stack">
+      <button class="btn primary" id="mSolo">SET OUT ALONE</button>
+      <button class="btn" id="mTogether">SET OUT TOGETHER <small>2 – 4</small></button>
+      <button class="btn ghost" id="mSettings">SETTINGS</button>
+    </nav>
+    <footer id="mFoot"></footer>
+  </section>
+
+  <!-- ============ together ============ -->
+  <section id="together" class="overlay" hidden>
+    <div class="panel">
+      <h2>SET OUT TOGETHER</h2>
+      <p class="sub">Two to four of you, tied along one thread. What needs two, needs both of you; what needs four, needs all four.</p>
+      <label class="field"><span>YOUR NAME</span><input id="cName" maxlength="14" autocomplete="off" spellcheck="false" /></label>
+      <div class="row">
+        <button class="btn primary" id="cCreate">TIE A NEW THREAD</button>
+      </div>
+      <div class="or"><i></i><span>or join one</span><i></i></div>
+      <div class="row">
+        <input id="cCode" class="code" maxlength="6" placeholder="CODE" autocomplete="off" spellcheck="false" />
+        <button class="btn" id="cJoin">JOIN</button>
+      </div>
+      <div id="cRooms"></div>
+      <p class="msg" id="cMsg"></p>
+      <button class="btn ghost" id="cBack">BACK</button>
+    </div>
+  </section>
+
+  <!-- ============ the thread (lobby) ============ -->
+  <section id="lobby" class="overlay clear" hidden>
+    <div class="panel">
+      <h2>THE THREAD</h2>
+      <div class="codebox"><span>CODE</span><b id="lCode">······</b><button class="btn small" id="lCopy">COPY LINK</button></div>
+      <ol id="lList"></ol>
+      <p class="sub" id="lNote"></p>
+      <div class="row">
+        <button class="btn primary" id="lStart">SET OUT</button>
+        <button class="btn ghost" id="lLeave">LEAVE</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ settings / pause ============ -->
+  <section id="pause" class="overlay" hidden>
+    <div class="panel">
+      <h2 id="pTitle">PAUSED</h2>
+      <label class="slider"><span>SOUND</span><input type="range" id="sSfx" min="0" max="100" /></label>
+      <label class="slider"><span>MUSIC</span><input type="range" id="sMusic" min="0" max="100" /></label>
+      <label class="slider"><span>BRIGHTNESS</span><input type="range" id="sBright" min="70" max="150" /></label>
+      <div class="keys" id="pKeys"></div>
+      <div class="row">
+        <button class="btn primary" id="pResume">BACK</button>
+        <button class="btn" id="pRetry" hidden>BACK TO THE LANTERN</button>
+        <button class="btn ghost" id="pLeave" hidden>GIVE UP</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ the end ============ -->
+  <section id="end" class="screen endscreen" hidden>
+    <div class="title">
+      <small id="eSmall">THE GREAT SPINDLE</small>
+      <h1 id="eTitle">UNBROKEN</h1>
+      <svg class="thread" viewBox="0 0 400 26" aria-hidden="true"><path d="M2 8 C 70 30, 130 -6, 200 13 S 330 28, 398 9" /><circle cx="200" cy="13" r="4.2" /></svg>
+      <p id="eLine"></p>
+      <p class="stats" id="eStats"></p>
+    </div>
+    <nav class="stack">
+      <button class="btn primary" id="eAgain">AGAIN</button>
+      <button class="btn ghost" id="eMenu">LEAVE THE LOOM</button>
+    </nav>
+  </section>
+
+  <!-- ============ loading ============ -->
+  <div id="boot">
+    <div class="title">
+      <small>THE</small>
+      <h1>THREAD&#8209;BEARERS</h1>
+      <div class="bar"><i id="loadFill"></i></div>
+      <p id="loadMsg">finding the thread</p>
+    </div>
+  </div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
