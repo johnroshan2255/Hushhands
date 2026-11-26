@@ -567,6 +567,20 @@
     yield* roomWalk('drum', 71.2, { brace: false });
     yield* walkTo(L().cps[2].x + 0.6 - role() * 0.8, { wait: false });
   };
+  S['upturned:3'] = function* () { // the moth-dust: anchored by the thread, float up to the ledge
+    yield* gather();
+    const up = (q) => q.ground && q.y > 13.4;
+    if (solo()) { yield* walkTo(150.4, { wait: false }); yield* setSpool(); }
+    else { hold('ShiftLeft'); yield* until(() => G.players.every((p) => p.i >= role() || up(p.b)), 60 * 60, 'the ones before me up'); release('ShiftLeft'); }
+    yield* walkTo(152.6, { wait: false });
+    yield* until(() => b().floatT > 0, 120, 'the dust');
+    yield* until(() => { const B = b(); if (up(B)) return true; if (B.y > 12.3) { hold('KeyD'); release('KeyA'); } else if (B.x > 154.9) { hold('KeyA'); release('KeyD'); } else { release('KeyA'); release('KeyD'); } return false; }, 60 * 8, 'up onto the ledge');
+    release('KeyD'); release('KeyA');
+    say('up on the ledge');
+    if (solo()) yield* callSpool();
+    else { yield* walkTo(157.5 + role() * 0.5, { wait: false }); hold('ShiftLeft'); yield* until(() => G.players.every((p) => up(p.b)), 60 * 60, 'everyone up'); release('ShiftLeft'); }
+    yield* toExit();
+  };
   S['upturned:2'] = function* () {
     yield* gather();
     // in only the right way up, and not just before it turns
@@ -576,7 +590,7 @@
     say('across the gallery');
     yield* roomWalk('gallery', 133, { hop, until: (R) => R.rot === 0 && !R.turning && R.warn == null });
     yield* roomWalk('gallery', 135.2, { hop, brace: true });
-    yield* toExit();
+    yield* walkTo(L().cps[3].x + 0.6 - role() * 0.8, { wait: false });
   };
   // ---- the Moth Tower: ledge to ledge, burning off moths at the candles; then the choice
   const H = 2.4;

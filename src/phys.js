@@ -147,6 +147,8 @@ export function stepPlayer(b, inp, dt, space, links, env = null) {
   b.swim = surf != null && b.y + 0.55 < surf && (!b.ground || b.y + 0.95 < surf);
   b.under = surf != null && b.y + 0.95 < surf;
   if (b.swim) return swimStep(b, inp, dt, space, links, surf, env);
+  // moth-dust: weightless; you drift up, steering a little, held down only by the thread
+  if (env && env.float) { inp = { ...inp, jump: false, brace: false, sneak: false }; b.ground = false; }
   b.braced = !!inp.brace && b.ground;
   b.sneak = !!inp.sneak && b.ground && !b.braced;
   const sp = b.braced ? 0 : b.sneak ? SNEAK : WALK;
@@ -164,7 +166,7 @@ export function stepPlayer(b, inp, dt, space, links, env = null) {
   else if (inp.jump && b.hang && b.reel > 0.3) { b.reel = 0; b.vy = Math.max(b.vy, 0) + 3.5; b.jbuf = 0; b.jumped = true; } // let go of what you climbed: a hop off the thread
   if (b.vy <= 0 || b.hang) b.rising = false;
   if (b.rising && !inp.jumpHeld && b.vy > 3.5) b.vy -= 34 * dt; // a tap is a hop
-  b.vy = Math.max(-28, b.vy - GRAV * dt);
+  if (env && env.float) b.vy = Math.min(2.2, b.vy + 9 * dt); else b.vy = Math.max(-28, b.vy - GRAV * dt);
   const wasGround = b.ground;
   moveBody(b, dt, space);
   // the thread

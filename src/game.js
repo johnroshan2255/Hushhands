@@ -708,7 +708,7 @@ export class Game {
       if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); else { const g = this.players.find((p) => !p.me && p.latched != null && !p.b.dead && Math.abs(p.b.x - b.x) < 1.4 && Math.abs(p.b.y - b.y) < 1.5); if (g) this.intent({ t: 'pull', k: g.i }); } }
       const links = W.phase === 'play' ? this.linksFor(this.meIdx) : [];
       if (b.dead || b.caged) this.deadBody(me, dt);
-      else { const rm = b.hold ? L.rooms.find((r) => r.id === b.holdRoom) : roomAt(L, b.x, b.y); if (rm) this.stepInRoom(rm, b, inp, dt, links, T); else { b.ang = 0; b.waist = WAIST; stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0 }); } }
+      else { const rm = b.hold ? L.rooms.find((r) => r.id === b.holdRoom) : roomAt(L, b.x, b.y); if (rm) this.stepInRoom(rm, b, inp, dt, links, T); else { b.ang = 0; b.waist = WAIST; stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0, float: this.floating(b, dt) }); } }
       this.mud(b, dt);
       if (can && !b.dead) { this.breathe(b, dt); this.pushCrates(b, inp, dt); this.rotting(b, dt, T); }
       if (can && !b.dead && !(this.btnT > 0)) for (const bt of L.buttons) if (!W.found.includes(`b${bt.k}`) && Math.abs(b.x - bt.x) < 0.65 && Math.abs(b.y - bt.y) < 1.1) { this.btnT = 1; this.intent({ t: 'button', k: bt.k }); }
@@ -819,6 +819,14 @@ export class Game {
     return { x, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
   }
 
+  /** moth-dust: a doll that walks into it is weightless for a few seconds */
+  floating(b, dt) {
+    if (!this.L.dust.length || b.dead) return false;
+    if (this.L.dust.some((d) => b.x > d.x0 && b.x < d.x1 && b.y > d.y0 && b.y < d.y1)) { if (!(b.floatT > 0)) { this.sfx.play('flutter', { x: b.x, vol: 1.2 }); this.cap('[pale dust, rising]'); } b.floatT = 4; }
+    else b.floatT = Math.max(0, (b.floatT || 0) - dt);
+    if (b.floatT > 0 && Math.random() < dt * 12) this.fx.burst('spore', b.x, b.y + 0.4, 0.4, 1, { power: 0.3 });
+    return b.floatT > 0;
+  }
   /** am I in a room that is about to turn, or turning? */
   inTurningRoom(b) { const r = b.hold ? this.L.rooms.find((q) => q.id === b.holdRoom) : roomAt(this.L, b.x, b.y); if (!r || !(r.period || r.lever)) return false; const st = roomState(r, this.T(), this.W.turnAt[r.id]); return st.warn != null || st.turning; }
   /** how a room stands now (for the playtests) */

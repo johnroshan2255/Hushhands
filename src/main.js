@@ -69,6 +69,8 @@ const HINTS = {
   upside: ['Here the halls hang from the roof. Walk on.', 'Here the halls hang from the roof. Walk on.'],
   drum: [`The lever turns the whole hall over. Hold ${K('SHIFT')} as it turns, or fall its height`, 'The lever turns the whole hall over. Press HOLD as it turns, or fall its height'],
   gallery: [`This one turns on its own. When it groans, hold ${K('SHIFT')}`, 'This one turns on its own. When it groans, press HOLD'],
+  dust: ['Moth-dust: it lifts you toward their nest. Someone holds fast below, on the thread, while you rise to the ledge', 'Moth-dust: it lifts you toward their nest. Someone holds fast below, on the thread, while you rise to the ledge'],
+  dust1: [`Moth-dust: it lifts you toward their nest. Set your spool down first (${K('E')}): it holds you on the thread`, 'Moth-dust: it lifts you toward their nest. Set your spool down first (USE): it holds you on the thread'],
   holdfast: [`IT IS TURNING. HOLD ${K('SHIFT')}`, 'IT IS TURNING. PRESS HOLD'],
   // the Theatre
   eye: ['Something watches the stage. Do not stand in its light', 'Something watches the stage. Do not stand in its light'],

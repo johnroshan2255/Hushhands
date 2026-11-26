@@ -11,6 +11,9 @@
 import * as pc from 'playcanvas';
 import { addSphere, addLathe, addCylinder } from './meshes.js';
 import { mats, ent, sharedMesh, stickMesh, setStick, addBeam, ink } from './scene.js';
+import { model } from './models.js';
+/** once the Blender body has arrived, wear it instead of the one built in code */
+function wear(view, name) { if (view.worn) return; const M = model(view.dev, name); if (!M || !M.parts.body) return; view.body.render.meshInstances[0].mesh = M.parts.body; view.worn = true; }
 import { newDrinker, thinkDrinker, packDrinker, unpackDrinker, DrinkerView } from './creatures/drinker.js';
 import { newGlutton, thinkGlutton, packGlutton, unpackGlutton, GluttonView } from './creatures/glutton.js';
 import { newPuppeteer, thinkPuppeteer, packPuppeteer, unpackPuppeteer, PuppeteerView } from './creatures/puppeteer.js';
@@ -98,7 +101,7 @@ export class CrawlerView {
     const dev = app.graphicsDevice, M = mats();
     this.root = new pc.Entity('crawler');
     app.root.addChild(this.root);
-    this.x = m.x; this.roof = m.y;
+    this.x = m.x; this.roof = m.y; this.dev = dev;
     const body = sharedMesh(dev, 'crawlbody', (mb) => {
       addSphere(mb, { x: 0, y: 0, r: 0.42, sy: 0.7, segW: 10, segH: 7, colFn: () => ink() });
       addSphere(mb, { x: -0.62, y: 0.02, r: 0.6, sy: 0.72, segW: 10, segH: 7, colFn: () => ink() });
@@ -117,6 +120,7 @@ export class CrawlerView {
   }
   destroy() { this.root.destroy(); }
   update(dt, m, T, floorY) {
+    wear(this, 'crawler');
     this.x += (m.x - this.x) * Math.min(1, dt * 16);
     this.face += (m.dir - this.face) * Math.min(1, dt * 8);
     const x = this.x, roof = this.roof;
@@ -167,11 +171,12 @@ export class CollectorView {
     this.body = ent(this.piv, body, M.world);
     this.legs = [-1, 1].map((s) => ({ s, a: ent(this.piv, stick, M.world), b: ent(this.piv, stick, M.world), foot: ent(this.piv, sharedMesh(dev, 'collfoot', (mb) => { addBeam(mb, -0.2, 0.09, 0.62, 0.09, 0, 0.18, 0.34, ink(), 0.1); }), M.world), fx: m.x + s * 0.5, sx: 0, step: 0 }));
     this.arms = [-1, 1].map((s) => ({ s, a: ent(this.piv, stick, M.world), b: ent(this.piv, stick, M.world), hand: ent(this.piv, sharedMesh(dev, 'collhand', (mb) => { for (let i = -1; i <= 1; i++) addBeam(mb, 0, 0, i * 0.16, -0.42, 0, 0.06, 0.06, ink(), 0.012); }), M.world), hx: 0, hy: 0 }));
-    this.x = m.x; this.y = m.y; this.face = m.dir; this.fall = 0; this.next = 0;
+    this.x = m.x; this.y = m.y; this.face = m.dir; this.fall = 0; this.next = 0; this.dev = dev;
   }
   destroy() { this.root.destroy(); }
   /** grabAt: { x, y } the wanderer being taken, if any */
   update(dt, m, T, grabAt) {
+    wear(this, 'collector');
     const moved = m.x - this.x;
     this.x += moved * Math.min(1, dt * 14);
     this.face += (m.dir - this.face) * Math.min(1, dt * 5);

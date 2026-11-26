@@ -310,6 +310,9 @@ export class Scene {
         bx(mb, x - 0.2, x + d.w + 0.2, y - 0.25, y + 0.15, -2.2, 2.2, ink(1.2));
         for (let sx = x; sx < x + d.w; sx += 0.9) bx(mb, sx, sx + 0.06, y - 3, y, 2.25, 2.35, ink(0.8));
         break;
+      case 'nest': // the moths' nest under the roof: grey wads and webbing, things stuck in it
+        for (let i = 0; i < 18; i++) addSphere(mb, { x: x + rng() * d.w, y: y - 0.2 - rng() * 0.8, z: -1.5 + rng() * 3, r: 0.4 + rng() * 0.6, sy: 0.6, segW: 8, segH: 5, colFn: () => rgba(0.32, 0.33, 0.3, 0.05), jitter: 0.3, rng });
+        break;
       case 'weaver': { // the Weaver: a huge hunched shape at its frame, long fingers still stitching; half of it gone
         const z = -2.2;
         addSphere(mb, { x: x - 0.6, y: y + 3.2, z, r: 1.6, sy: 1.3, segW: 12, segH: 8, colFn: () => ink(), jitter: 0.25, rng });

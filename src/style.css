@@ -134,6 +134,7 @@ input[type=range]::-moz-range-thumb { width: 1.15rem; height: 1.15rem; border: 0
 .tb.jump { right: calc(1.3rem + var(--safe-r)); bottom: calc(1.5rem + var(--safe-b)); width: 5.6rem; height: 5.6rem; font-size: 0.86rem; }
 .tb.brace { right: calc(7.6rem + var(--safe-r)); bottom: calc(1.2rem + var(--safe-b)); width: 4.6rem; height: 4.6rem; }
 .tb.use { right: calc(2.1rem + var(--safe-r)); bottom: calc(7.9rem + var(--safe-b)); width: 4.4rem; height: 4.4rem; border-color: var(--amber); color: var(--amber); }
+.tb.ping { right: calc(8.4rem + var(--safe-r)); bottom: calc(7.2rem + var(--safe-b)); width: 2.6rem; height: 2.6rem; font-size: 1rem; opacity: 0.8; }
 body.touching #hint { bottom: auto; top: calc(0.8rem + var(--safe-t)); max-width: min(30rem, 66vw); font-size: 0.86rem; }
 
 /* ---------- loading ---------- */
