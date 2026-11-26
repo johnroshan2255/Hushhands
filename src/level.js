@@ -46,3 +46,8 @@ export function waterLevel(W, t0, T) {
   const t = Math.max(0, T - t0 - (W.delay ?? 1.5));
   return Math.min(W.y1, W.y0 + t * W.rate + (W.accel ? 0.5 * W.accel * t * t : 0));
 }
+/** an eel under the water: it glows for a second, then flashes; { warn, flash, beat } */
+export function eelAt(e, T) {
+  const ph = (((T + e.off) % e.period) + e.period) % e.period;
+  return { warn: ph > e.period - 1.1, flash: ph < 0.3, beat: Math.floor((T + e.off) / e.period), glow: ph > e.period - 1.1 ? (ph - (e.period - 1.1)) / 1.1 : ph < 0.3 ? 1 : 0 };
+}

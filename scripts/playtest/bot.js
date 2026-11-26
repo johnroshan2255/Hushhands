@@ -296,6 +296,88 @@
     yield* walkTo(L().cps[4].x + 0.6 - role() * 0.9);
   };
   S['fen:4'] = function* () { for (const x of [131, 143, 153]) { yield* creep(mudAt(x - 0.5)); } yield* toExit(); };
+  // ---- the Drowned Mill: swim, dive, the crate, the eels, the Cistern, the sluice
+  /** swim (or walk) to x, keeping the feet at about depth (null: at the top), climbing out at the end */
+  function* swimTo(x, depth = null, o = {}) {
+    for (let i = 0; ; i++) {
+      chk();
+      if (i > 60 * 30) throw new Error(`stuck swimming to ${x.toFixed(1)}`);
+      const B = b(), dir = Math.sign(x - B.x);
+      if (Math.abs(x - B.x) < 0.25 && (B.ground || !o.out)) break;
+      if (o.done && o.done()) break;
+      hold(dir > 0 ? 'KeyD' : 'KeyA'); release(dir > 0 ? 'KeyA' : 'KeyD');
+      if (B.ground && !B.swim && !B.under) { if (wallAhead(dir) && !B.mantle) { hold('Space'); } else release('Space'); release('KeyS'); }
+      else if (depth != null && B.y > depth + 0.15) { hold('KeyS'); release('Space'); }
+      else if (depth != null && B.y < depth - 0.4) { release('KeyS'); hold('Space'); }
+      else if (depth == null) { release('KeyS'); hold('Space'); }
+      else { release('KeyS'); release('Space'); }
+      yield;
+    }
+    release('KeyD'); release('KeyA'); release('KeyS'); release('Space');
+  }
+  const crate = () => L().crates[0];
+  /** wait at this lantern until everyone still standing is here */
+  function* gather() { const c = L().cps[W().cp]; yield* until(() => G.players.every((p) => p.b.dead || (Math.abs(p.b.x - c.x) < 3.5 && Math.abs(p.b.y - c.y) < 1)), 60 * 60, 'the others at the lantern'); }
+  S['mill:0'] = function* () {
+    yield* walkTo(9.6, { wait: false });
+    yield* swimTo(14.3, null);
+    yield* swimTo(17.6, -3.4);
+    yield* swimTo(23.2, null, { out: true });
+    say('through the stair');
+    // the crate: push it in, then across to the ledge's wall
+    yield* walkTo(35.6, { wait: false });
+    hold('KeyD'); yield* until(() => b().swim, 120, 'into the water'); release('KeyD');
+    hold('Space'); yield* until(() => b().y > L().waters[1].y1 - 1.05, 300, 'coming up'); release('Space');
+    for (let k = 0; k < 6 && crate().x < 47.0; k++) {
+      if (b().x > crate().x - crate().w / 2 - 0.2) { yield* swimTo(crate().x - crate().w / 2 - 0.6, null); }
+      hold('Space'); hold('KeyD'); yield* until(() => b().x > crate().x - crate().w / 2 - 0.35 || b().x > crate().x, 300, 'to the crate'); release('KeyD'); yield* until(() => b().y > L().waters[1].y1 - 1.05, 240, 'surfacing'); release('Space');
+      hold('KeyD'); yield* until(() => crate().x > 46.95 || b().x > crate().x || b().y < L().waters[1].y1 - 1.3, 60 * 12, 'pushing the crate'); release('KeyD');
+    }
+    say(`the crate at ${crate().x.toFixed(1)}`);
+    // onto it, then up to the ledge
+    const top = L().cps[1].y - 0.1;
+    for (let k = 0; k < 8 && !(b().ground && b().y > top); k++) {
+      const onCrate = b().ground && !b().swim && b().y < top - 0.5 && b().x > 44;
+      if (!onCrate) { yield* swimTo(crate().x - crate().w / 2 - 0.3, null); hold('KeyD'); hold('Space'); yield* frames(30); release('KeyD'); release('Space'); continue; }
+      yield* walkTo(crate().x + 0.35, { wait: false, tol: 0.1 });
+      hold('KeyD'); hold('Space'); yield* frames(16); release('Space'); yield* frames(30); release('KeyD');
+    }
+    if (!(b().y > top)) throw new Error('never got up off the crate');
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.8);
+  };
+  const eel = (i) => L().eels[i];
+  const justFlashed = (e) => { const T = G.T(), ph = (((T + e.off) % e.period) + e.period) % e.period; return ph > 0.32 && ph < 0.9; };
+  S['mill:1'] = function* () {
+    yield* gather();
+    yield* walkTo(53.7, { wait: false });
+    yield* until(() => justFlashed(eel(0)), 60 * 8, 'the first eel flashing');
+    yield* swimTo(62.3, null, { out: true });
+    yield* walkTo(63.6, { wait: false });
+    yield* until(() => justFlashed(eel(1)), 60 * 8, 'the second eel flashing');
+    yield* swimTo(72.4, null, { out: true });
+    yield* walkTo(L().cps[2].x + 0.6 - role() * 0.8);
+  };
+  S['mill:2'] = function* () {
+    yield* gather();
+    const V = L().levers.filter((l) => l.id === 'cis');
+    if (solo()) { const P = L().plates.find((p) => p.id === 'cis'); yield* walkTo(P.x, { wait: false }); yield* setSpool(); }
+    const v = solo() ? V[0] : V[role() % V.length];
+    // to the wheel: walk there, or climb to it
+    if (v.y > 1) {
+      const sh = L().solids.find((q) => Math.abs(q.y1 - v.y) < 0.05 && v.x > q.x0 && v.x < q.x1);
+      for (let k = 0; k < 6 && !(b().ground && b().y > v.y - 0.1); k++) {
+        yield* walkTo(sh.x0 - 0.32, { wait: false, tol: 0.06 });
+        hold('Space'); yield* until(() => b().vy < 2.5 && !b().ground, 60, 'rising'); hold('KeyD');
+        yield* until(() => (b().ground && !b().mantle) || b().swim, 120, 'landing'); release('Space'); release('KeyD');
+      }
+    }
+    yield* walkTo(v.x, { wait: false, tol: 0.3 });
+    hold('KeyE');
+    yield* until(() => { const B = b(); if (W().open.cis) return true; if (Math.abs(B.x - v.x) > 0.6) { hold(B.x < v.x ? 'KeyD' : 'KeyA'); release(B.x < v.x ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); } if (B.swim && B.y > v.y + 0.6) hold('KeyS'); else release('KeyS'); return false; }, 60 * 40, 'every wheel turned');
+    releaseAll();
+    if (solo()) yield* callSpool();
+    yield* toExit();
+  };
   S['spindle:0'] = function* () { // the spindle
     const R = L().rings;
     if (solo()) { yield* walkTo(R[0].x); yield* setSpool(); yield* walkTo(R[1].x); }

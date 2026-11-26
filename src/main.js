@@ -55,6 +55,14 @@ const HINTS = {
   wormed: [`SOMETHING IS IN YOUR HEAD. Hammer ${K('SPACE')} to tear it out`, `SOMETHING IS IN YOUR HEAD. Hammer ${K('JUMP')} to tear it out`],
   friendWormed: [`A worm has {name}. It will come for you. Get close and press ${K('E')} to rip it out`, `A worm has {name}. It will come for you. Get close and press ${K('USE')} to rip it out`],
   rings: ['Every ring. Together', 'Every ring. Together'],
+  // the Drowned Mill
+  swim: [`In deep water you sink. Hold ${K('SPACE')} to swim up, ${K('S')} to dive. The ring over you is your breath`, 'In deep water you sink. Hold JUMP to swim up, pull down to dive. The ring over you is your breath'],
+  dive: ['Dive under the wall. Come up on the other side before your breath runs out', 'Dive under the wall. Come up on the other side before your breath runs out'],
+  crate: [`Walk into the crate to push it into the water. It floats: push it, swimming; climb it with ${K('SPACE')}`, 'Walk into the crate to push it into the water. It floats: push it, swimming; climb it with JUMP'],
+  eel: ['Something lights up under the water before it strikes. Out of the water when it glows', 'Something lights up under the water before it strikes. Out of the water when it glows'],
+  cistern: [`The door has shut. Every wheel turned at once: ${K('E')}, held, even under water`, 'The door has shut. Every wheel turned at once: USE, held, even under water'],
+  cistern1: [`The door has shut. Spool on the plate, then turn the wheel: ${K('E')}, held`, 'The door has shut. Spool on the plate, then turn the wheel: USE, held'],
+  sluice: ['The sluice is open. Climb', 'The sluice is open. Climb'],
   // the Fen
   latched: [`A DRINKER IS ON YOU. Hammer ${K('SPACE')} to shake it off`, `A DRINKER IS ON YOU. Hammer ${K('JUMP')} to shake it off`],
   friendLatched: [`A Drinker is drinking {name}. Get close and press ${K('E')} to tear it off`, `A Drinker is drinking {name}. Get close and press ${K('USE')} to tear it off`],
@@ -138,6 +146,8 @@ async function boot() {
     },
     toast(text) { const t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 4200); },
     end(s) { showEnd(s); },
+    /** the breath left (0..1) in a ring over the doll's head; null hides it */
+    breath(k, at) { const el = $('breath'); if (k == null || !at) { el.hidden = true; return; } el.hidden = false; el.style.left = `${at[0]}px`; el.style.top = `${at[1]}px`; el.style.setProperty('--b', k.toFixed(3)); el.classList.toggle('low', k < 0.3); },
     /** the card between chapters: the last one's lines, then the next one's name; then() starts it */
     between({ num, name, lines }, then) {
       const el = $('between');

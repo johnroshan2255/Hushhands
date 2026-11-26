@@ -11,12 +11,12 @@ export function kit(n, meta = {}) {
   const L = {
     n, nb, ...meta,
     solids: [], plates: [], gates: [], levers: [], traps: [], worms: [], hooks: [], cps: [], bells: [], slabs: [], cogs: [], rings: [], kill: [], shears: [], monsters: [], deco: [], hints: [], zones: [],
-    waters: [], crates: [], valves: [], rooms: [], lamps: [], mud: [], blooms: [], fumes: [], sacks: [], meat: [], boards: [], candles: [], dust: [], buttons: [], others: [], tally: [], drawings: [], bodiesOf: [], presses: [], swarms: [], exit: null,
+    waters: [], crates: [], valves: [], rooms: [], lamps: [], mud: [], blooms: [], fumes: [], sacks: [], meat: [], boards: [], candles: [], dust: [], buttons: [], others: [], tally: [], drawings: [], bodiesOf: [], presses: [], swarms: [], eels: [], exit: null,
   };
   const solid = (x0, y0, x1, y1, o = {}) => { const s = { x0, y0, x1, y1, ...o }; L.solids.push(s); return s; };
   const ground = (x0, x1, top, o = {}) => solid(x0, top - 30, x1, top, { ground: true, ...o });
   const cp = (x, y, name) => { L.cps.push({ i: L.cps.length, x, y, name }); L.tally.push({ x: x - 1.6, y, n: 0 }); };
-  const gate = (x, y, id, h = 5) => { const g = solid(x, y, x + 0.7, y + h, { gate: id }); L.gates.push({ id, x, y, h }); return g; };
+  const gate = (x, y, id, h = 5, o = {}) => { const g = solid(x, y, x + 0.7, y + h, { gate: id }); L.gates.push({ id, x, y, h, ...o }); return g; };
   const platesAt = (x, y, id, count = nb, gap = 2.8) => { for (let i = 0; i < count; i++) L.plates.push({ id, x: x + i * gap, y, w: 1.5 }); return x + (count - 1) * gap; };
   const deco = (kind, x, y, o = {}) => L.deco.push({ kind, x, y, ...o });
   const hint = (x0, x1, text) => L.hints.push({ x0, x1, text });
@@ -40,6 +40,6 @@ export function finish(L) {
   if (L.x0 == null) L.x0 = -14;
   if (L.x1 == null) { let m = 0; for (const s of L.solids) if (s.x1 < 1e4) m = Math.max(m, s.x1); L.x1 = m; }
   L.waters.forEach((w, i) => { w.i = i; if (w.id == null) w.id = `w${i}`; });
-  L.crates.forEach((c, i) => { c.i = i; });
+  L.crates.forEach((c, i) => { c.i = i; c.x0 = c.x; c.y0 = c.y; c.vx = c.vx || 0; c.vy = 0; });
   return L;
 }

@@ -5,7 +5,7 @@ import * as pc from 'playcanvas';
 import { MeshBuilder, rgba, addBox, addSphere, addCylinder, addLathe } from './meshes.js';
 import { worldMaterial, glowMaterial, fogMaterial, tintMaterial, setTint } from './render.js';
 import { mulberry32 } from './noise.js';
-import { wormOut, cogPad, shearsShut, shearsWarn } from './level.js';
+import { wormOut, cogPad, shearsShut, shearsWarn, eelAt } from './level.js';
 
 const INK = [0.04, 0.043, 0.042];
 export const ink = (k = 1, g = 0) => rgba(INK[0] * k, INK[1] * k, INK[2] * k, g);
@@ -426,7 +426,10 @@ export class Scene {
     this.plates = L.plates.map((p) => { const e = ent(root, plateM, M.world, p.x, p.y, 0); const lamp = ent(e, lampM, M.world, 0, 0.08, 0.71); lamp.setLocalScale(1.1, 0.05, 0.03); const h = glow(e, 0.9, 0, 0.1, 0.75); lamp.enabled = h.enabled = false; return { p, e, lamp, h, k: 0 }; });
     // levers
     const armM = SM('leverarm', (mb) => { addBeam(mb, 0, 0, 0, 1.0, 0, 0.09, 0.09, ink()); addSphere(mb, { y: 1.02, r: 0.13, segW: 8, segH: 6, colFn: () => ink(1.3) }); });
-    this.levers = L.levers.map((l) => { const e = ent(root, armM, M.world, l.x, l.y + 0.25, 0); const lamp = ent(e, lampS, M.world, 0, 1.02, 0); lamp.setLocalScale(0.15, 0.15, 0.15); const h = glow(e, 0.8, 0, 1.02, 0.2); lamp.enabled = h.enabled = false; return { l, e, lamp, h, a: 38 }; });
+    // a valve is a lever that is a wheel: it turns while held
+    const wheelM = SM('valvewheel', (mb) => { addAnnulus(mb, 0, 0, 0, 0.28, 0.36, 18, 0.07, ink(1.2)); for (let i = 0; i < 4; i++) { const a = (i / 4) * Math.PI * 2; addBeam(mb, 0, 0, Math.cos(a) * 0.3, Math.sin(a) * 0.3, 0, 0.05, 0.05, ink()); } addAnnulus(mb, 0, 0, 0, 0, 0.07, 8, 0.12, ink()); });
+    const postM = SM('valvepost', (mb) => { addBeam(mb, 0, 0, 0, 0.75, -0.2, 0.14, 0.14, ink()); addBeam(mb, -0.25, 0.02, 0.25, 0.02, -0.2, 0.08, 0.3, ink()); });
+    this.levers = L.levers.map((l) => { if (l.valve) { ent(root, postM, M.world, l.x, l.y, 0); const e = ent(root, wheelM, M.world, l.x, l.y + 0.78, 0.05); const h = glow(root, 0.7, l.x, l.y + 0.78, 0.3); h.enabled = false; return { l, e, lamp: h, h, a: 0, valve: true }; } const e = ent(root, armM, M.world, l.x, l.y + 0.25, 0); const lamp = ent(e, lampS, M.world, 0, 1.02, 0); lamp.setLocalScale(0.15, 0.15, 0.15); const h = glow(e, 0.8, 0, 1.02, 0.2); lamp.enabled = h.enabled = false; return { l, e, lamp, h, a: 38 }; });
     // bear traps: two toothed jaws
     const jawM = SM('jaw', (mb) => { bx(mb, 0, 0.5, 0, 0.05, -0.28, 0.28, ink()); for (let i = 0; i < 4; i++) { const k = mb.count, x = 0.12 + i * 0.12; mb.vert(x - 0.05, 0.05, 0, 0, 0, 1, ink()); mb.vert(x + 0.05, 0.05, 0, 0, 0, 1, ink()); mb.vert(x, 0.24, 0, 0, 0, 1, ink(1.6)); mb.tri(k, k + 1, k + 2); const k2 = mb.count; mb.vert(x - 0.05, 0.05, 0.27, 0, 0, 1, ink()); mb.vert(x + 0.05, 0.05, 0.27, 0, 0, 1, ink()); mb.vert(x, 0.24, 0.27, 0, 0, 1, ink(1.6)); mb.tri(k2, k2 + 1, k2 + 2); } });
     this.traps = L.traps.map((t) => { const e = ent(root, null, null, t.x, t.y + 0.02, 0); const a = ent(e, jawM, M.world), b = ent(e, jawM, M.world); b.setLocalScale(-1, 1, 1); ent(e, SM('trapbase', (mb) => bx(mb, -0.14, 0.14, -0.02, 0.07, -0.2, 0.2, ink())), M.world); return { t, e, a, b, k: 0, v: 0 }; });
@@ -480,6 +483,12 @@ export class Scene {
     const stubM = SM('candle', (mb) => { addCylinder(mb, { y: 0, r0: 0.09, r1: 0.08, h: 0.75, seg: 8, colFn: () => ink(1.4) }); addCylinder(mb, { y: -0.02, r0: 0.25, r1: 0.22, h: 0.06, seg: 10, colFn: () => ink() }); addCylinder(mb, { y: -0.3, r0: 0.04, r1: 0.04, h: 0.3, seg: 5, colFn: () => ink() }); addBeam(mb, -0.08, 0.6, -0.12, 0.42, 0.06, 0.03, 0.03, ink(1.8)); });
     const flameM = SM('flame', (mb) => addSphere(mb, { y: 0.1, r: 0.07, sy: 2.2, segW: 7, segH: 6, colFn: () => amber(1.3, 1) }));
     this.candles = L.candles.map((c) => { const e = ent(root, stubM, M.world, c.x, c.y + 0.3, -0.2); const f = ent(root, flameM, M.world, c.x, c.y + 1.08, -0.2); const h = glow(root, 0.9, c.x, c.y + 1.15, 0.1); return { c, e, f, h }; });
+    // crates: an old wooden box, planks and a cross-brace
+    this.crates = L.crates.map((c) => { const m = SM(`crate${c.w}x${c.h}`, (mb) => { bx(mb, -c.w / 2, c.w / 2, 0, c.h, -0.55, 0.55, ink(1.15)); for (let y = 0.15; y < c.h; y += 0.3) bx(mb, -c.w / 2 - 0.02, c.w / 2 + 0.02, y, y + 0.04, -0.57, 0.57, ink(0.7)); addBeam(mb, -c.w / 2 + 0.05, 0.05, c.w / 2 - 0.05, c.h - 0.05, 0.58, 0.08, 0.02, ink(0.8)); }); return { c, e: ent(root, m, M.world, c.x, c.y, 0) }; });
+    // eels: a long dark ribbon low in the water, with a pale glow that swells before it strikes
+    if (!this.M.eel) { this.M.eel = glowMaterial(1.8); this.M.eel.setParameter('uTint', new Float32Array([0.72, 0.9, 1, 1])); }
+    const eelM = SM('eel', (mb) => { for (let i = 0; i < 12; i++) { const x0 = -1.2 + i * 0.2, x1 = x0 + 0.2, w0 = 0.12 * Math.sin(((i + 0.5) / 12) * Math.PI), w1 = 0.12 * Math.sin(((i + 1.5) / 12) * Math.PI); addBeam(mb, x0, Math.sin(i * 0.9) * 0.1, x1, Math.sin((i + 1) * 0.9) * 0.1, 0, w0 + 0.02, 0.15, ink(), w1 + 0.02); } });
+    this.eels = L.eels.map((e) => ({ e, body: ent(root, eelM, M.world, e.x, e.y, 0.6), glow: (() => { const h = ent(root, halo(dev), this.M.eel, e.x, e.y, 1.4, 93); h.enabled = false; return h; })() }));
     // the spindle's rings
     const beamM = SM('ringbeam', (mb) => { const k = mb.count; for (const [x, y, a] of [[-0.7, 0, 0.5], [0.7, 0, 0.5], [0.5, 7, 0], [-0.5, 7, 0]]) mb.vert(x, y, 0, 0, 0, 1, rgba(1, 0.62, 0.22, a)); mb.tri(k, k + 1, k + 2); mb.tri(k, k + 2, k + 3); });
     this.rings = L.rings.map((r) => { const lamp = ent(root, lampM, M.world, r.x, r.y + 0.09, 0.86); lamp.setLocalScale(1.6, 0.04, 0.03); const beam = ent(root, beamM, M.beam, r.x, r.y + 0.1, -0.3, 88); lamp.enabled = beam.enabled = false; return { r, lamp, beam, k: 0 }; });
@@ -502,12 +511,14 @@ export class Scene {
     const lit = this.lit;
     lit.length = 0;
     for (const s of this.shafts || []) lit.push({ x: s.x, y: s.y + 0.6, z: 0.9, r: 2.2 + s.w, col: [0.72, 0.8, 0.78], k: 0.55 * s.k, pri: 0 });
+    for (const o of this.crates || []) o.e.setLocalPosition(o.c.x, o.c.y, 0);
+    for (const o of this.eels || []) { const ph = eelAt(o.e, T); o.body.setLocalPosition(o.e.x + Math.sin(T * 0.7 + o.e.x) * 0.8, o.e.y + Math.sin(T * 1.3) * 0.15, 0.6); o.body.setLocalEulerAngles(0, 0, Math.sin(T * 2.2 + o.e.x) * 8); const g = ph.glow; o.glow.enabled = g > 0.02; if (g > 0.02) { const s = ph.flash ? o.e.r * 0.9 : 0.5 + g * 0.9; o.glow.setLocalPosition(o.body.getLocalPosition().x, o.e.y + (ph.flash ? 0.6 : 0), 1.4); o.glow.setLocalScale(s, s * (ph.flash ? 0.6 : 1), s); lit.push({ x: o.e.x, y: o.e.y + 0.8, z: 1, r: ph.flash ? o.e.r + 2 : 2.5, col: [0.72, 0.9, 1], k: ph.flash ? 3 : g * 0.9, pri: 2 }); } }
     for (const o of this.candles || []) { const fl = 0.85 + Math.sin(T * 13 + o.c.x) * 0.08 + Math.sin(T * 31 + o.c.x * 3) * 0.05; o.f.enabled = o.h.enabled = !o.c.out; if (o.c.out) continue; o.f.setLocalScale(1, fl, 1); o.h.setLocalScale(0.7 * fl, 0.9 * fl, 0.7); lit.push({ x: o.c.x, y: o.c.y + 1.2, z: 0.4, r: 4.8, col: [1, 0.6, 0.25], k: 1.7 * fl, pri: 1 }); }
     if (this.L.exit) { const e = this.L.exit; lit.push({ x: e.x + 0.6, y: e.y + 2, z: -0.4, r: 4.2, col: [0.78, 0.84, 0.8], k: 0.9 + Math.sin(T * 0.8) * 0.1, pri: 0 }); }
     const ease = (o, to, rate) => { o.k += (to - o.k) * Math.min(1, dt * rate); return o.k; };
     for (const o of this.gates) { const k = ease(o, W.open[o.g.id] ? 1 : 0, 3.2); o.e.setLocalPosition(o.g.x, o.g.y - k * (o.g.h + 0.7) + (k > 0.02 && k < 0.97 ? Math.sin(T * 60) * 0.015 : 0), 0); }
     this.plates.forEach((o, i) => { const on = !!W.plates[i] || !!W.open[o.p.id]; const k = ease(o, W.plates[i] ? 1 : 0, 14); o.e.setLocalPosition(o.p.x, o.p.y - k * 0.1, 0); if (o.lamp.enabled !== on) o.lamp.enabled = o.h.enabled = on; if (on) lit.push({ x: o.p.x, y: o.p.y + 0.5, z: 0.8, r: 3.2, col: AMBER, k: 1.5 }); });
-    this.levers.forEach((o, i) => { const on = !!W.levers[i] || !!W.open[o.l.id]; o.a += ((on ? -38 : 38) - o.a) * Math.min(1, dt * 12); o.e.setLocalEulerAngles(0, 0, o.a); if (o.lamp.enabled !== on) o.lamp.enabled = o.h.enabled = on; if (on) lit.push({ x: o.l.x + 0.5, y: o.l.y + 1.1, z: 0.6, r: 3, col: AMBER, k: 1.5 }); });
+    this.levers.forEach((o, i) => { if (o.valve) { const on = !!W.levers[i]; o.a += (on ? 220 : 0) * dt; o.e.setLocalEulerAngles(0, 0, -o.a); if (o.h.enabled !== (on || !!W.open[o.l.id])) o.h.enabled = on || !!W.open[o.l.id]; return; } const on = !!W.levers[i] || !!W.open[o.l.id]; o.a += ((on ? -38 : 38) - o.a) * Math.min(1, dt * 12); o.e.setLocalEulerAngles(0, 0, o.a); if (o.lamp.enabled !== on) o.lamp.enabled = o.h.enabled = on; if (on) lit.push({ x: o.l.x + 0.5, y: o.l.y + 1.1, z: 0.6, r: 3, col: AMBER, k: 1.5 }); });
     this.traps.forEach((o, i) => {
       // a hidden one lies sunk under the grass, and comes up only when someone is all but on it
       if (o.t.hidden) { const near = W.meX != null && Math.abs(W.meX - o.t.x) < 1.5; o.rv = (o.rv || 0) + ((near || W.traps[i] ? 1 : 0) - (o.rv || 0)) * Math.min(1, dt * (near ? 22 : 2)); o.e.setLocalPosition(o.t.x, o.t.y + 0.02 - (1 - o.rv) * 0.42, 0); }

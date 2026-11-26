@@ -20,8 +20,9 @@ export function newBody(x, y) {
 /** What is solid right now: the level's boxes (minus open gates), plus thin things you can stand on
  *  from above: glass slabs, cog pads, and a taut thread between two braced wanderers. */
 export class Space {
-  constructor(L) { this.L = L; this.walk = []; }
-  solids() { return this.L.solids; }
+  constructor(L) { this.L = L; this.walk = []; this.all = L.solids; this.extra = []; }
+  /** the level's boxes, and this frame's moving ones (crates) */
+  solids() { return this.all; }
   open(s) { return s.gate !== undefined && this.gateOpen[s.gate]; }
   /** refresh the stand-on-from-above pieces for this frame */
   begin(T, gateOpen, bridges) {
@@ -32,6 +33,10 @@ export class Space {
     for (const s of L.slabs) if (!s.broken) w.push({ id: `s${s.i}`, x0: s.x0, x1: s.x1, y0: s.y, y1: s.y, vx: 0, vy: 0 });
     L.cogs.forEach((c, ci) => { for (let k = 0; k < c.pads; k++) { const p = cogPad(c, k, T); w.push({ id: `c${ci}_${k}`, x0: p.x - 0.75, x1: p.x + 0.75, y0: p.y, y1: p.y, vx: p.vx, vy: p.vy }); } });
     for (const b of bridges) w.push(b);
+    // crates: solid sides (their top a hair low) and a top you stand on that carries you
+    this.extra.length = 0;
+    for (const c of L.crates) { if (c.gone) continue; this.extra.push({ x0: c.x - c.w / 2, x1: c.x + c.w / 2, y0: c.y, y1: c.y + c.h - 0.04, crate: c }); w.push({ id: `k${c.i}`, x0: c.x - c.w / 2, x1: c.x + c.w / 2, y0: c.y + c.h, y1: c.y + c.h, vx: c.vx || 0, vy: c.vy || 0 }); }
+    this.all = this.extra.length ? L.solids.concat(this.extra) : L.solids;
   }
 }
 
@@ -122,7 +127,7 @@ export function tether(b, o, wb, wo) {
 }
 
 /** one step of the local wanderer. inp: { x, y, jump (tap), jumpHeld, brace, sneak } ; links: neighbours */
-export function stepPlayer(b, inp, dt, space, links) {
+export function stepPlayer(b, inp, dt, space, links, env = null) {
   b.t += dt;
   b.noise = 0; b.landed = 0; b.jumped = false;
   if (b.dead || b.caged) { b.vx = 0; b.vy = 0; return; }
@@ -136,6 +141,12 @@ export function stepPlayer(b, inp, dt, space, links) {
     if (k >= 1) { b.mantle = null; b.ground = true; b.coyote = 0.1; }
     return;
   }
+  // ---- water: below the waist you swim. Soaked, a doll sinks unless it strokes up (JUMP); near the
+  // surface it treads water; at the surface JUMP leaps out. Under, the breath goes (game.js counts it).
+  const surf = env && env.surface != null ? env.surface : null;
+  b.swim = surf != null && b.y + 0.55 < surf && (!b.ground || b.y + 0.95 < surf);
+  b.under = surf != null && b.y + 0.95 < surf;
+  if (b.swim) return swimStep(b, inp, dt, space, links, surf, env);
   b.braced = !!inp.brace && b.ground;
   b.sneak = !!inp.sneak && b.ground && !b.braced;
   const sp = b.braced ? 0 : b.sneak ? SNEAK : WALK;
@@ -197,6 +208,33 @@ export function stepPlayer(b, inp, dt, space, links) {
     }
   }
 }
+/** swimming: slow, heavy, the thread still pulling */
+function swimStep(b, inp, dt, space, links, surf, env) {
+  b.braced = false; b.sneak = false; b.hang = false; b.coyote = 0; b.climbing = 0;
+  const k = Math.min(1, dt * 3.2);
+  b.vx += (inp.x * 2.4 - b.vx) * k;
+  if (inp.x) b.facing = Math.sign(inp.x);
+  const float = surf - 0.86; // where the feet are when the head is just out
+  let ty;
+  if (env.grip) { b.vx = 0; ty = 0; } // holding on to something under water (a valve)
+  else if (inp.jumpHeld) ty = b.y < float - 0.05 ? 2.6 : 0;
+  else if (inp.y < 0) ty = -2.4;
+  else ty = b.y < float - 0.25 ? -0.55 : (float - b.y) * 3; // under: sink slowly; at the top: tread water
+  b.vy += (ty - b.vy) * k;
+  if (inp.jump && b.y > float - 0.3) { b.vy = 7.2; b.swim = false; b.jumped = true; b.rising = true; } // out, onto a ledge if there is one
+  const wasY = b.y;
+  moveBody(b, dt, space);
+  if (b.ground && !b.under) b.swim = false;
+  void wasY;
+  let taut = false;
+  const wb = weight(b);
+  for (let it = 0; it < 2; it++) for (const o of links) { if (tether(b, o, wb, weight(o)) > 0.001) taut = true; }
+  if (taut) depen(b, space);
+  b.taut = taut;
+  // a hand on a ledge: pushing toward a wall whose top is just above the water
+  const dir = Math.sign(inp.x);
+  if (dir && !b.ground) { const s = wallAt(b, space, dir); if (s && !(s.crate && !inp.jumpHeld)) { const rise = s.y1 - b.y, tx = (dir > 0 ? s.x0 : s.x1) + dir * (HW + 0.14); if (rise > 0.18 && rise <= REACH + 0.2 && isFree(space, tx, s.y1 + 0.01, HW, HT_LOW)) b.mantle = { x0: b.x, y0: b.y, x1: tx, y1: s.y1, t: 0, dir }; } }
+}
 /** the solid we are pressed against on that side, if any */
 function wallAt(b, space, dir) {
   const h = b.sneak ? HT_LOW : HT;
@@ -240,3 +278,17 @@ export function stepSpool(s, dt, space, player) {
   if (s.stuck > 0.12) { s.mode = 'return'; s.x0 = s.x; s.y0 = s.y; s.t = 0; s.stuck = 0; }
 }
 export const newSpool = (x, y) => ({ x, y, vx: 0, vy: 0, ground: false, mode: 'follow', reel: 0, onId: null, waist: 0.2, sneak: false, t: 0, landed: 0 });
+
+/** a crate: falls, floats (its top a little above the water), slides when pushed, stops at walls */
+export function stepCrate(c, dt, L, open, surf, push) {
+  const sp = { solids: () => L.solids, open, walk: [] };
+  if (push) c.vx += (push * 1.7 - c.vx) * Math.min(1, dt * 8);
+  else c.vx *= Math.exp(-(c.ground ? 9 : c.wet ? 1.5 : 0.3) * dt);
+  const fl = surf != null ? surf + 0.22 - c.h : null; // where it floats
+  c.wet = fl != null && c.y < fl + 0.05;
+  if (c.wet && c.floats) c.vy += ((fl - c.y) * 4 - c.vy) * Math.min(1, dt * 3);
+  else c.vy = Math.max(-20, c.vy - GRAV * dt);
+  const b = { x: c.x, y: c.y, vx: c.vx, vy: c.vy, ground: c.ground, onId: null, sneak: false };
+  moveBody(b, dt, sp, c.w / 2, c.h);
+  c.x = b.x; c.y = b.y; c.vx = b.vx; c.vy = b.vy; c.ground = b.ground;
+}

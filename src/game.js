@@ -2,9 +2,9 @@
 // checks its own dangers; the host's browser also keeps the world: plates, levers, gates, the glass,
 // the bells, the water, the two hunters, checkpoints, death and the way back, and the ending.
 // Alone, you are the host and nothing goes over the wire.
-import { LINK, wormOut, wormWarn, shearsBeat, waterLevel } from './level.js';
+import { LINK, wormOut, wormWarn, shearsBeat, waterLevel, eelAt } from './level.js';
 import { buildChapter, CHAPTERS } from './chapters/index.js';
-import { Space, newBody, stepPlayer, stepSpool, newSpool, linkLen, WAIST, HT, HT_LOW, GRAV } from './phys.js';
+import { Space, newBody, stepPlayer, stepSpool, newSpool, linkLen, stepCrate, WAIST, HT, HT_LOW, GRAV, HW } from './phys.js';
 import { Scene, mats, ent, halo, AMBER, sharedMesh, ink } from './scene.js';
 import { addLathe } from './meshes.js';
 import { glowMaterial } from './render.js';
@@ -85,7 +85,9 @@ export class Game {
     this.spool = n === 1 ? newSpool(0, 0) : null;
     this.spoolView = this.spool ? new SpoolView(app) : null;
     this.W = { open: { ...open }, plates: [], levers: [], traps: [], slabs: [], wake: 0, scream: false, wT0: {}, wl: L.waters.map((w) => w.y0), cp: Math.min(cp, L.cps.length - 1), rings: [], won: 0, phase: 'play', deaths, cut, epoch: 0, tripped, bell: {}, found: [...found], exitT: 0 };
-    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {} };
+    for (const g of L.gates) if (g.startOpen && open[g.id] === undefined) this.W.open[g.id] = true;
+    this.drainAt = {}; this.eelBeat = {}; this.pushT = 0;
+    this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {} };
     this.mon = L.monsters.map(newMonster);
     this.monViews = L.monsters.map((m) => viewFor(app, m));
     if (tripped) for (const m of this.mon) if (m.kind === 'collector') m.mode = 'down';
@@ -171,6 +173,7 @@ export class Game {
     for (const id of m.o) W.open[id] = true;
     W.plates = unbits(m.pl, L.plates.length); W.levers = unbits(m.lv, L.levers.length); W.traps = unbits(m.tr, L.traps.length); W.rings = unbits(m.rg, L.rings.length);
     W.slabs = m.sl; W.wake = m.wk; W.wT0 = m.w0 || {}; W.cp = Math.max(W.cp, m.cp); W.deaths = m.d;
+    if (m.cr) m.cr.forEach((c, i) => { const k = L.crates[i]; if (k) { k.tx = c[0]; k.ty = c[1]; } });
     m.m.forEach((a, i) => { if (this.mon[i]) unpackMonster(this.mon[i], a); });
   }
   /** someone left: those who remain go on from the last lantern, with a thread cut for their number */
@@ -207,6 +210,7 @@ export class Game {
       delete H.latched[who];
       unlatch(this.mon[mi]);
       this.emit({ t: 'unlatch', mi, who, by: i.t === 'pull' ? from : -1 });
+    } else if (i.t === 'push') { H.push[i.k] = { dir: Math.sign(i.dir), until: T + 0.2 };
     } else if (i.t === 'lunge') {
       if (H.wormed[from]) this.emit({ t: 'lunge', who: from });
     } else if (i.t === 'bell') {
@@ -254,7 +258,9 @@ export class Game {
     const next = L.cps[W.cp + 1];
     if (next && bodies.some((b) => b.real && !b.dead && b.x >= next.x - 0.6 && Math.abs(b.y - next.y) < 3)) { W.cp++; this.emit({ t: 'cp', k: W.cp }); }
     // the water comes in once someone is well inside
-    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && b.y < w.floor + 7)) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); }
+    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && b.y < w.floor + 7)) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); if (w.lock) { W.open[w.lock] = false; this.emit({ t: 'shut', id: w.lock }); } }
+    // crates: they fall, float, and slide while someone pushes
+    L.crates.forEach((c, i) => { const ps = H.push[i]; stepCrate(c, dt, L, (s) => this.space.open(s), this.surfaceAt(c.x, c.y + c.h / 2), ps && ps.until > T ? ps.dir : 0); });
     // the way on: everyone still standing through the arch
     if (L.exit && !this.ended) {
       const live = bodies.filter((b) => b.real && !b.dead);
@@ -296,7 +302,8 @@ export class Game {
     H.snapT -= dt;
     if (H.snapT <= 0 && this.net.online) {
       H.snapT = 0.1;
-      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster) });
+      this.snapX = L.crates.length ? L.crates.map((c) => [Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100]) : undefined;
+      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX });
     }
   }
 
@@ -309,6 +316,7 @@ export class Game {
       case 'gate': { W.open[e.id] = true; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.burst('dust', g.x + 0.35, g.y + 0.2, 0.5, 10, { spread: 1.2 }); fx.shake(0.35); } break; }
       case 'cp': W.cp = Math.max(W.cp, e.k); { const c = L.cps[e.k]; sfx.play('chime', { x: c.x }); fx.burst('ember', c.x - 0.54, c.y + 1.5, -1.2, 10); this.hud.card(c.name, ''); } this.saveNow(); break;
       case 'flood': W.wT0[e.id] = W.wT0[e.id] ?? this.T(); sfx.play('water'); fx.shake(0.3); break;
+      case 'shut': { W.open[e.id] = false; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.shake(0.5); } break; }
       case 'crack': W.slabs[e.k] = 1; sfx.play('crackle', { x: L.slabs[e.k].x0 + 1.3 }); break;
       case 'shatter': { W.slabs[e.k] = 2; const s = L.slabs[e.k]; sfx.play('glass', { x: s.x0 + 1.3 }); for (let x = s.x0 + 0.3; x < s.x1; x += 0.6) fx.burst('glass', x, s.y - 0.1, 0, 5, { spread: 0.7 }); break; }
       case 'bell': { this.bellAt[e.k] = this.T(); const b = L.bells[e.k]; sfx.play(b.kind === 'hang' ? 'bell' : 'tinybell', { x: b.x }); W.wake = Math.max(W.wake, 0.6); break; }
@@ -409,6 +417,9 @@ export class Game {
   onRespawn(e) {
     const W = this.W;
     W.epoch = e.ep; W.cp = e.cp; W.phase = 'play'; W.traps = []; W.slabs = []; W.wake = 0; W.scream = false; W.wT0 = {}; W.plates = []; W.levers = []; W.rings = [];
+    for (const w of this.L.waters) if (w.lock && !(w.drain && W.open[w.drain])) W.open[w.lock] = true;
+    for (const c of this.L.crates) { const keep = c.x0 < this.L.cps[e.cp].x - 1 && c.x > this.L.cps[e.cp].x; if (!keep) { c.x = c.x0; c.y = c.y0; c.vx = c.vy = 0; c.tx = c.ty = undefined; } }
+    this.drainAt = {}; this.eelBeat = {};
     this.bellAt = {}; this.bellMine = {}; this.dying = false; this.cutT = 0;
     for (const p of this.players) { p.wormed = false; p.lungeT = 0; p.latched = null; p.b.dark = 0; }
     this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.wormSafe = 1; this.latchT = 0;
@@ -433,7 +444,9 @@ export class Game {
     const me = this.me, b = me.b;
     if (live) {
       for (const s of L.slabs) s.broken = (W.slabs[s.i] || 0) === 2;
-      L.waters.forEach((w, i) => { W.wl[i] = waterLevel(w, W.wT0[w.id], T); });
+      L.waters.forEach((w, i) => { W.wl[i] = this.levelOf(w, T); });
+      // crates: the host moves them; the rest ease toward where it says
+      if (!this.isHost) for (const c of L.crates) if (c.tx != null) { const k = Math.min(1, dt * 12); c.x += (c.tx - c.x) * k; c.y += (c.ty - c.y) * k; }
       space.begin(T, W.open, this.bridges());
       // ---- me
       const can = W.phase === 'play' && !this.attract && !this.paused && (this.startedAt == null || T > 0);
@@ -446,8 +459,9 @@ export class Game {
       if (can && this.wormT <= 0 && !b.dead && input.tap('use')) { const f = this.players.find((p) => !p.me && p.wormed && !p.b.dead && Math.abs(p.b.x - b.x) < 1.3 && Math.abs(p.b.y - b.y) < 1.4); if (f) this.intent({ t: 'rip', k: f.i }); else { const g = this.players.find((p) => !p.me && p.latched != null && !p.b.dead && Math.abs(p.b.x - b.x) < 1.4 && Math.abs(p.b.y - b.y) < 1.5); if (g) this.intent({ t: 'pull', k: g.i }); } }
       const links = W.phase === 'play' ? this.linksFor(this.meIdx) : [];
       if (b.dead || b.caged) this.deadBody(me, dt);
-      else stepPlayer(b, inp, dt, space, links);
+      else stepPlayer(b, inp, dt, space, links, { surface: this.surfaceAt(b.x, b.y), grip: can && input.held('use') && this.nearLever(b) >= 0 });
       this.mud(b, dt);
+      if (can && !b.dead) { this.breathe(b, dt); this.pushCrates(b, inp, dt); }
       if (this.spool) this.stepSpoolAll(dt, can);
       me.use = can && input.held('use') && this.nearLever(b) >= 0;
       // ---- the others, eased toward where they say they are
@@ -568,6 +582,43 @@ export class Game {
     else b.dark = Math.max(0, (b.dark || 0) - dt);
     if (this.spool) { if (inMud && this.spool.mode === 'follow') this.spool.dark = 6; else this.spool.dark = Math.max(0, (this.spool.dark || 0) - dt); }
   }
+  /** a water's level now: rising since it was let in; falling fast once its drain is open */
+  levelOf(w, T) {
+    const lv = waterLevel(w, this.W.wT0[w.id], T);
+    if (w.drain && this.W.open[w.drain]) { const d = this.drainAt[w.id] || (this.drainAt[w.id] = { T, from: this.W.wl[w.i] ?? lv }); return Math.max(w.floor - 0.6, d.from - (T - d.T) * 2.2); }
+    return lv;
+  }
+  /** the surface of the swimmable water at (x, y), or null */
+  surfaceAt(x, y) {
+    const { L, W } = this;
+    let best = null;
+    for (let i = 0; i < L.waters.length; i++) { const w = L.waters[i]; if (w.kind === 'race' || w.kind === 'bog' || x < w.x0 || x > w.x1) continue; const lv = W.wl[i]; if (lv > w.floor + 0.05 && y < lv && y > w.floor - 2 && (best === null || lv > best)) best = lv; }
+    return best;
+  }
+  /** the top of any swimmable water at x (or far below) */
+  levelUnder(x) { const { L, W } = this; let best = -1e9; L.waters.forEach((w, i) => { if (x >= w.x0 && x <= w.x1 && w.kind !== 'race' && w.kind !== 'bog' && W.wl[i] > w.floor + 0.05) best = Math.max(best, W.wl[i]); }); return best; }
+  /** under water the breath goes; out of it, it comes back. Empty: drowned */
+  breathe(b, dt) {
+    if (b.breath == null) b.breath = 1;
+    if (b.under) {
+      b.breath -= dt / 8;
+      if ((this.bubT = (this.bubT || 0) - dt) <= 0) { this.bubT = 0.5 + Math.random() * 0.6; this.fx.burst('drop', b.x + b.facing * 0.1, b.y + 1.0, 0.4, 2, { power: 0.3 }); this.sfx.play('bubble', { x: b.x, vol: 0.5 }); }
+      if (b.breath <= 0) { b.breath = 0; this.die('water'); }
+    } else { if (b.breath < 0.45 && !this.gasped) { this.gasped = true; this.sfx.play('gasp', { x: b.x }); } if (b.breath > 0.6) this.gasped = false; b.breath = Math.min(1, b.breath + dt * 0.7); }
+    const show = b.breath < 0.999;
+    if (show) this.hud.breath(b.breath, this.project(b.x, b.y + 1.55)); else if (this.breathShown) this.hud.breath(null);
+    this.breathShown = show;
+  }
+  /** walking into a crate pushes it (the host moves it) */
+  pushCrates(b, inp, dt) {
+    this.pushT -= dt;
+    if (!inp.x || this.pushT > 0 || !this.L.crates.length) return;
+    const dir = Math.sign(inp.x);
+    const c = this.L.crates.find((q) => !q.gone && b.y < q.y + q.h - 0.1 && b.y + 0.6 > q.y && Math.abs((dir > 0 ? q.x - q.w / 2 : q.x + q.w / 2) - (b.x + dir * HW)) < 0.06);
+    if (!c) return;
+    this.pushT = 0.08;
+    this.intent({ t: 'push', k: c.i, dir });
+  }
   /** the things that can end me */
   dangers(T) {
     const { L, W } = this, b = this.me.b;
@@ -581,6 +632,15 @@ export class Game {
       if (out < 0.3) continue;
       // it doesn't kill you: it gets in
       if (w.dir > 0 ? b.y < w.y + w.len * out - 0.1 && b.y + h > w.y : b.y + h > w.y - w.len * out + 0.1 && b.y < w.y) { this.possessMe(); break; }
+    }
+    for (const e of L.eels) {
+      const ph = eelAt(e, T);
+      if (ph.flash && this.eelBeat[e.x] !== ph.beat) {
+        this.eelBeat[e.x] = ph.beat;
+        const wet = (q) => q.y + 0.4 < this.levelUnder(q.x) && Math.abs(q.x - e.x) < e.r;
+        if (wet(b)) return this.die('shock');
+        if (this.linksFor(this.meIdx).some((o) => o.id !== 'spool' && wet(o))) { b.stun = 1.1; this.fx.shake(0.4); this.hud.flash('#cfe8ff', 0.35, 90); }
+      }
     }
     for (let i = 0; i < L.waters.length; i++) { const w = L.waters[i]; if (w.kind === 'race' && b.x > w.x0 && b.x < w.x1 && W.wl[i] > b.y + 0.95 && b.y < w.y1) return this.die('water'); if (w.kind === 'bog' && b.x > w.x0 && b.x < w.x1 && b.y < W.wl[i] - 0.25) return this.die('water'); }
     for (let i = 0; i < L.shears.length; i++) {
