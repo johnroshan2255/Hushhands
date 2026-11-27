@@ -1150,6 +1150,10 @@ export class Game {
       if (!this.isHost && live) { if (m.kind === 'crawler') { if (m.mode === 'roam') m.x = clamp(m.x + m.dir * 1.5 * dt, m.x0, m.x1); m.t += dt; } else m.t += dt; }
       if (m.kind !== 'crawler' && m.kind !== 'collector') {
         if (!this.isHost && live) m.t += dt;
+        // far off the screen: not drawn, not posed
+        const far = Math.abs(m.x - this.cam.x) > 26 && m.kind !== 'glutton' && m.kind !== 'puppeteer';
+        if (v.root && v.root.enabled === far && m.mode !== 'dead' && m.mode !== 'burnt' && m.mode !== 'full') v.root.enabled = !far;
+        if (far) return;
         const vic = m.who >= 0 ? this.players[m.who] : null;
         v.update(dt, m, T, vic);
         // the hum: rising as it comes, a whine when it hunts
