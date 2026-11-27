@@ -73,6 +73,7 @@ node scripts/playtest/views.mjs                         # every screen shape
 node scripts/playtest/worm.mjs                          # the worm in the head, every way it can go
 node scripts/playtest/photo.mjs                         # photo mode (O), alone and together
 node scripts/playtest/graphics.mjs                      # the GRAPHICS setting, on a phone
+node scripts/playtest/fullscreen.mjs                    # the FULL SCREEN setting
 ```
 
 `TB_SHOW=1` plays in a Chrome window you can watch, with sound. The playtests play as a returning

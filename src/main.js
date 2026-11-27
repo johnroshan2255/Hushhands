@@ -436,7 +436,7 @@ async function boot() {
     $('pResume').textContent = playing ? 'GO ON' : 'BACK';
     $('pKeys').innerHTML = touchUI ? '' : '<b>A D / ← →</b><span>walk, swing on the thread</span><b>SPACE</b><span>jump, let go of the thread</span><b>W S / ↑ ↓</b><span>climb the thread; S creeps on the ground</span><b>SHIFT</b><span>brace: hold the thread fast</span><b>E</b><span>levers; your spool, when alone</span>';
     $('pKeys').hidden = touchUI;
-    gfxUI();
+    gfxUI(); fullUI();
     show('pause', true);
     if (playing) { game.paused = true; input.enabled = false; portal.setPlaying(false); }
   };
@@ -528,6 +528,37 @@ async function boot() {
     device.maxPixelRatio = Math.min(window.devicePixelRatio || 1, DPR[gfxLevel(gfx)]); app.resizeCanvas();
     gfxUI();
   });
+  // full screen: the whole screen for the game (no address bar, no tabs). A browser only allows it from
+  // a tap or a key, so the choice is kept and taken up again at the first tap after the game opens.
+  // An iPhone's browser has no such thing for a page: there, the way is the home screen.
+  // (Not on a portal that gives its own full-screen button.)
+  const fsRoot = document.documentElement;
+  const fsAsk = fsRoot.requestFullscreen || fsRoot.webkitRequestFullscreen, fsQuit = document.exitFullscreen || document.webkitExitFullscreen;
+  const fsCan = !!fsAsk && !!fsQuit && (document.fullscreenEnabled ?? document.webkitFullscreenEnabled ?? true);
+  const fsOn = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const fsApp = !!navigator.standalone || matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches; // opened from the home screen: it already has the screen
+  const fsEnter = () => { try { const r = fsAsk.call(fsRoot, { navigationUI: 'hide' }); if (r && r.catch) r.catch(() => {}); } catch { /* not allowed just now */ } };
+  const fsLeave = () => { try { const r = fsQuit.call(document); if (r && r.catch) r.catch(() => {}); } catch { /* */ } };
+  const fullUI = () => {
+    if (portal.ON_CRAZY) { show('sFullRow', false); return; }
+    const b = $('sFull');
+    if (fsApp) { b.textContent = 'ON'; b.disabled = true; $('sFullS').textContent = 'opened from the home screen'; }
+    else if (!fsCan) { b.textContent = 'OFF'; b.disabled = true; $('sFullS').textContent = /iPhone|iPod/.test(navigator.userAgent) ? 'on an iPhone: Share, then Add to Home Screen, and open it from there' : 'this browser cannot'; }
+    else { b.textContent = fsOn() ? 'ON' : 'OFF'; $('sFullS').textContent = fsOn() ? 'the game and nothing else' : store.get('tb.full', '') ? 'at your next tap' : 'the game and nothing else'; }
+  };
+  fullUI();
+  if (fsCan && !fsApp && !portal.ON_CRAZY) {
+    $('sFull').addEventListener('click', () => { sfx.play('click'); const on = !fsOn(); store.set('tb.full', on ? '1' : ''); if (on) fsEnter(); else fsLeave(); fullUI(); });
+    // left with ESC or the back gesture: that is a choice too (but not when it is the page itself going: a reload keeps it)
+    let going = false;
+    for (const ev of ['beforeunload', 'pagehide']) addEventListener(ev, () => { going = true; });
+    for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) document.addEventListener(ev, () => { if (!fsOn() && !going) store.set('tb.full', ''); fullUI(); app.resizeCanvas(); });
+    // chosen before: back into it at the first tap or key (the browser will not allow it sooner)
+    if (store.get('tb.full', '')) {
+      const again = (e) => { if (e.target && e.target.id === 'sFull') return; removeEventListener('click', again, true); removeEventListener('keydown', again, true); if (store.get('tb.full', '') && !fsOn()) fsEnter(); };
+      addEventListener('click', again, true); addEventListener('keydown', again, true);
+    }
+  }
   const goreUI = () => { const full = game.goreMode !== 'stitched'; $('sGore').textContent = full ? 'FULL' : 'STITCHED'; $('sGoreS').textContent = full ? 'red dye, torn limbs' : 'grey stuffing, nothing torn off'; };
   goreUI();
   $('sGore').addEventListener('click', () => { sfx.play('click'); game.goreMode = game.goreMode === 'stitched' ? 'full' : 'stitched'; store.set('tb.gore', game.goreMode); game.gore.setting = game.goreMode; goreUI(); });

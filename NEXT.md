@@ -63,6 +63,8 @@ mode, clips (C: the last ~20 s as a .webm, on stronger machines), **photo mode**
 still when alone, the screen bare, the camera free with the arrows and + / −, ENTER keeps a .png),
 what took you on the end screen. **Graphics** in the settings panel (AUTO, LOW, MEDIUM, HIGH; AUTO is
 LOW on phones and weak machines): sharpness changes at once, lights and smooth edges at the title.
+**Full screen** in the same panel: kept, and taken up again at the first tap after the game opens (an
+iPhone's browser has none for a page: the row says to add the game to the home screen).
 
 ## What was checked
 
