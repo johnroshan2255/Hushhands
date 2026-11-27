@@ -103,8 +103,7 @@ Headless Chrome on Windows, against the built game, with the code-player pressin
   silent; everyone in a room builds from the host's). *Second Thread* is built simply (no Other Doll
   ahead of you any more). *One Thread* (no lanterns inside a chapter) is a kind of journey; **the Daily Thread** is one
   chapter a day with that day's seed and one life, and a board of times kept by the server
-  (`/daily`, in memory and `server/daily.json`). Not built: death replays, cosmetics, Twitch votes,
-  photo mode.
+  (`/daily`, in memory and `server/daily.json`). Not built: death replays, cosmetics, Twitch votes.
 - Low-end devices (section 15): no real phone or old laptop yet (only Chrome's throttling).
 - Voice behind strict networks needs a TURN server (only STUN now).
 - Clips are video only (no sound).
