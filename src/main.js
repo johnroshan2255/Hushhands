@@ -251,6 +251,7 @@ async function boot() {
   const show = (id, on) => { $(id).hidden = !on; };
   function setState(s) {
     state = s;
+    closePhoto(); // the held moment ends with the screen it was taken on
     show('menu', s === 'menu'); show('lobby', s === 'lobby'); show('end', s === 'end'); show('hud', s === 'play');
     show('touch', s === 'play' && touchUI);
     document.body.classList.toggle('touching', touchUI);
@@ -423,7 +424,7 @@ async function boot() {
   $('iClose').addEventListener('click', () => { sfx.play('click'); closeInfo(); });
   $('iStory').addEventListener('click', () => { sfx.play('click'); show('info', false); showStory(() => { if (infoPaused) show('info', true); else openInfo(); }); });
   $('iTrial').addEventListener('click', () => { sfx.play('select'); closeInfo(); if (net.online) return; playSolo(true); startTrial(); });
-  addEventListener('keydown', (e) => { if (e.code !== 'KeyI' || (e.target && e.target.tagName === 'INPUT') || !$('story').hidden) return; if (!$('info').hidden) closeInfo(); else if ($('pause').hidden) openInfo(); });
+  addEventListener('keydown', (e) => { if (e.code !== 'KeyI' || (e.target && e.target.tagName === 'INPUT') || !$('story').hidden || game.photo) return; if (!$('info').hidden) closeInfo(); else if ($('pause').hidden) openInfo(); });
 
   // ---- settings / pause
   const openPause = (title) => {
@@ -460,11 +461,18 @@ async function boot() {
   $('sVoice').addEventListener('click', async () => { sfx.play('click'); const ok = await voice.enable(!voice.on); if (!ok) $('sVoiceS').textContent = 'the microphone was not allowed'; voiceUI(); });
   setInterval(() => voice.update(game), 100);
   // photo mode (O): the moment held still (alone), the screen bare, the camera free; ENTER keeps a picture
+  // (together the Loom does not stop, but your hands are on the camera: the arrows must not walk you)
+  function openPhoto() { game.photo = { dx: 0, dy: 0, zoom: 1 }; document.body.classList.add('photo'); input.enabled = false; if (!net.online) game.paused = true; }
+  function closePhoto() {
+    if (!game.photo) return;
+    game.photo = null; document.body.classList.remove('photo');
+    if (state === 'play' && $('pause').hidden && $('info').hidden) { input.enabled = true; if (!net.online) game.paused = false; }
+  }
   addEventListener('keydown', (e) => {
     if (state !== 'play' || (e.target && e.target.tagName === 'INPUT')) return;
     if (e.code === 'KeyO') {
-      if (game.photo) { game.photo = null; document.body.classList.remove('photo'); if (!net.online) { game.paused = false; input.enabled = true; } return; }
-      game.photo = { dx: 0, dy: 0, zoom: 1 }; document.body.classList.add('photo'); if (!net.online) { game.paused = true; input.enabled = false; }
+      if (game.photo) closePhoto();
+      else if ($('pause').hidden && $('info').hidden && $('story').hidden) openPhoto(); // (not from under a panel: leaving it would let the game run behind the panel)
       return;
     }
     if (!game.photo) return;
@@ -497,8 +505,8 @@ async function boot() {
   const goreUI = () => { const full = game.goreMode !== 'stitched'; $('sGore').textContent = full ? 'FULL' : 'STITCHED'; $('sGoreS').textContent = full ? 'red dye, torn limbs' : 'grey stuffing, nothing torn off'; };
   goreUI();
   $('sGore').addEventListener('click', () => { sfx.play('click'); game.goreMode = game.goreMode === 'stitched' ? 'full' : 'stitched'; store.set('tb.gore', game.goreMode); game.gore.setting = game.goreMode; goreUI(); });
-  addEventListener('keydown', (e) => { if (e.code !== 'Escape' && e.code !== 'KeyP') return; if (e.target && e.target.tagName === 'INPUT') return; if (!$('info').hidden) { closeInfo(); return; } if (!$('pause').hidden) closePause(); else if (state === 'play') openPause('PAUSED'); });
-  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play' && !net.online && $('pause').hidden) openPause('PAUSED'); });
+  addEventListener('keydown', (e) => { if (e.code !== 'Escape' && e.code !== 'KeyP') return; if (e.target && e.target.tagName === 'INPUT') return; if (game.photo) { closePhoto(); return; } if (!$('info').hidden) { closeInfo(); return; } if (!$('pause').hidden) closePause(); else if (state === 'play') openPause('PAUSED'); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'play' && !net.online && $('pause').hidden && !game.photo) openPause('PAUSED'); });
   addEventListener('touchstart', () => { if (!touchUI) { touchUI = true; setState(state); } }, { passive: true });
 
   // ---- the end

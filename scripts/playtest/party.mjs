@@ -47,6 +47,7 @@ for (;;) {
   const s = [];
   for (const p of pages) s.push(await read(p));
   s.forEach((q, i) => { for (; seen[i] < q.log.length; seen[i]++) console.log(`  ${'ABCD'[i]}`, q.log[seen[i]]); });
+  pages.forEach((p, i) => { for (p.told = p.told || 0; p.told < p.errors.length; p.told++) console.log(`  ${'ABCD'[i]} !! ${p.errors[p.told]}`); }); // (said when it happens, so the log shows where)
   if (s[0].cp !== lastCp) { lastCp = s[0].cp; await sleep(600); await a.screenshot({ path: `${SHOTS}party${N}-cp${s[0].cp}.png` }); }
   if (process.env.EVERY && Date.now() - t0 > shots * +process.env.EVERY * 1000) await a.screenshot({ path: `${SHOTS}party${N}-t${String(shots++).padStart(3, '0')}.png` });
   const failed = s.map((q, i) => (q.failed ? `${'ABCD'[i]}: ${q.failed}` : '')).filter(Boolean).join('; ');

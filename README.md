@@ -70,6 +70,8 @@ TB_URL=http://localhost:2568 TB_SERVER=ws://localhost:2568 node scripts/playtest
 CH=4 ... party.mjs 2                                    # start from a chapter (index into the list)
 node scripts/playtest/leave.mjs 3 2                     # a guest lets go; the rest go on
 node scripts/playtest/views.mjs                         # every screen shape
+node scripts/playtest/worm.mjs                          # the worm in the head, every way it can go
+node scripts/playtest/photo.mjs                         # photo mode (O), alone and together
 ```
 
 `TB_SHOW=1` plays in a Chrome window you can watch, with sound. The playtests play as a returning

@@ -131,7 +131,9 @@
       yield* until(() => {
         const B = b();
         if (across(B)) return true;
-        if (B.mantle) { hold('KeyD'); release('KeyA'); return false; }
+        // on the far ledge (or pulling up onto it): walk on. The thread, still short from the climb, tugs
+        // you back for a frame as you stand up; pumping "with the swing" then would walk you off again
+        if (B.mantle || (B.ground && B.x > far.x0)) { hold('KeyD'); release('KeyA'); release('Space'); pump = 1; return false; }
         if (Math.abs(B.vx) > 0.3) pump = Math.sign(B.vx);
         if (B.hang && B.x > far.x0 - 0.15 && B.y > far.y1 + 0.05) { hold('Space'); pump = 1; } else release('Space');
         hold(pump > 0 ? 'KeyD' : 'KeyA'); release(pump > 0 ? 'KeyA' : 'KeyD');
@@ -328,7 +330,12 @@
   }
   const crate = () => L().crates[0];
   /** wait at this lantern until everyone still standing is here */
-  function* gather() { const c = L().cps[W().cp]; yield* until(() => G.players.every((p) => p.b.dead || (p.b.ground && Math.abs(p.b.x - c.x) < 3.5 && Math.abs(p.b.y - c.y) < 0.6)), 60 * 60, 'the others at the lantern'); }
+  function* gather() {
+    const c = L().cps[W().cp], here = (p) => p.b.ground && Math.abs(p.b.x - c.x) < 3.5 && Math.abs(p.b.y - c.y) < 0.6;
+    // (or someone has already gone on from it: the gathering has been, seen by those who were here
+    // first while I was still a step short of the lantern; waiting for them to come back is waiting for ever)
+    yield* until(() => G.players.every((p) => p.b.dead || here(p)) || G.players.some((p) => !p.me && !p.b.dead && p.b.x > c.x + 3.6), 60 * 60, 'the others at the lantern');
+  }
   S['mill:0'] = function* () {
     yield* walkTo(9.6, { wait: false });
     yield* swimTo(14.3, null);
@@ -347,7 +354,11 @@
     say(`the crate at ${crate().x.toFixed(1)}`);
     // onto it, then up to the ledge
     const top = L().cps[1].y - 0.1;
-    for (let k = 0; k < 16 && !(b().ground && b().y > top); k++) {
+    for (let k = 0; k < 16; k++) {
+      // come down first: asked in mid-air (the last jump still falling back onto the crate) "am I on the
+      // crate?" is no, and the answer to no is back to its edge and another short jump, for ever
+      yield* until(() => (b().ground && !b().mantle) || b().swim, 180, 'coming down by the crate');
+      if (b().ground && b().y > top) break;
       const onCrate = b().ground && !b().swim && b().y < top - 0.5 && b().x > 44;
       if (!onCrate) { yield* swimTo(crate().x - crate().w / 2 - 0.3, null); hold('KeyD'); hold('Space'); yield* frames(30); release('KeyD'); release('Space'); continue; }
       yield* walkTo(crate().x + 0.35 - (k % 3) * 0.25, { wait: false, tol: 0.1 });
@@ -357,14 +368,21 @@
     yield* walkTo(L().cps[1].x + 0.6 - role() * 0.8);
   };
   const eel = (i) => L().eels[i];
-  const justFlashed = (e) => { const T = G.T(), ph = (((T + e.off) % e.period) + e.period) % e.period; return ph > 0.32 && ph < 0.9; };
+  // into the eel's water all at once, as people would count it in: one who goes a flash ahead of the
+  // rest swims to the end of the thread and is held there, in the eel's reach, by those still on the bank
+  const goNow = (e, shore) => {
+    const crew = G.players.filter((p) => !p.b.dead);
+    if (crew.some((p) => !p.me && p.b.x > shore + 0.7 && p.b.x < shore + 5)) return true; // someone has gone: with them
+    const T = G.T(), ph = (((T + e.off) % e.period) + e.period) % e.period;
+    return ph > 0.32 && ph < (crew.length > 1 ? 0.65 : 0.9) && crew.every((p) => p.b.ground && Math.abs(p.b.x - shore) < 1.3);
+  };
   S['mill:1'] = function* () {
     yield* gather();
     yield* walkTo(53.7, { wait: false });
-    yield* until(() => justFlashed(eel(0)), 60 * 8, 'the first eel flashing');
+    yield* until(() => goNow(eel(0), 53.7), 60 * 14, 'the first eel flashing');
     yield* swimTo(62.3, null, { out: true });
     yield* walkTo(63.6, { wait: false });
-    yield* until(() => justFlashed(eel(1)), 60 * 8, 'the second eel flashing');
+    yield* until(() => goNow(eel(1), 63.6), 60 * 14, 'the second eel flashing');
     yield* swimTo(72.4, null, { out: true });
     yield* walkTo(L().cps[2].x + 0.6 - role() * 0.8);
   };
@@ -487,7 +505,11 @@
       yield* walkTo(s.x - role() * 0.14, { wait: false, tol: 0.08 });
       yield* hide();
     }
-    yield* until(() => G.players.every((p) => Math.abs(glut().x - p.b.x) > (N() > 1 ? 9.5 : 6)), 60 * 40, 'a moment to move');
+    // the dash off the boards, all at once: first everyone into the last sack (each one still coming
+    // calls it back across the floor, and a wait counted from before they are here runs out), then the moment
+    const last = L().sacks.filter((q) => q.x < 46).pop();
+    yield* until(() => G.players.every((p) => p.b.dead || Math.abs(p.b.x - last.x) < 0.7), 60 * 150, 'the others in the last sack');
+    yield* until(() => G.players.every((p) => Math.abs(glut().x - p.b.x) > (N() > 1 ? 9.5 : 6)), 60 * 90, 'a moment to move');
     release('KeyS');
     yield* walkTo(L().cps[2].x + 0.4 - role() * 0.5, { wait: false });
   };
@@ -496,7 +518,9 @@
     const q = L().meat[0];
     if (role() === 0) { yield* walkTo(q.x, { wait: false, tol: 0.2 }); yield* tap('KeyE', 4); yield* until(() => W().meat[0] >= 1, 120, 'the meat falling'); }
     else yield* until(() => W().meat[0] >= 1, 60 * 20, 'the meat falling');
-    yield* walkTo(53.5 - role() * 0.5, { wait: false });
+    // the one who knocked it down gets clear of it; the rest stay on the stone until it is chewing
+    // (walking after them over the meat is walking over its mouth as it comes up)
+    if (role() === 0) yield* walkTo(53.5, { wait: false });
     yield* until(() => glut().mode === 'chew', 60 * 20, 'it chewing');
     yield* walkTo(L().cps[3].x + 0.4 - role() * 0.5, { wait: false });
   };
@@ -569,7 +593,7 @@
     yield* walkTo(23.4, { wait: false });
     const hc = () => G.mon.find((m) => m.id === 'hc');
     yield* roomWalk('hall', 23.2, { sneak: (f) => (f > 42.4 && f < 45.6) || f < 35.4, hop: (d, f) => d < 0 && f - 38 > 0.35 && f - 38 < 0.75, stop: (f) => f < 35.6 && f > 24.4 && Math.abs(hc().x - f) < 3 });
-    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.8);
+    yield* walkTo(L().cps[1].x + 0.6 - role() * 0.55); // (closer together than elsewhere: 0.8 apart, the fourth stands on the lip of the last stair, a step above the lantern, and is never "at" it)
   };
   S['upturned:1'] = function* () {
     yield* gather();
@@ -593,7 +617,18 @@
     else { yield* walkTo(150.65 - (role() - 1) * 0.5, { wait: false }); hold('ShiftLeft'); yield* until(() => G.players.every((p) => p.i >= role() || up(p.b)), 60 * 60, 'the ones before me up'); release('ShiftLeft'); }
     yield* walkTo(152.6, { wait: false });
     yield* until(() => b().floatT > 0, 120, 'the dust');
-    yield* until(() => { const B = b(); if (up(B)) return true; if (B.y > 11.3) { hold('KeyD'); release('KeyA'); } else if (B.x > 154.9) { hold('KeyA'); release('KeyD'); } else { release('KeyA'); release('KeyD'); } return false; }, 60 * 8, 'up onto the ledge');
+    // drift right as you rise, to meet the ledge's lip with your hands at its height, and pull up over it.
+    // (Not later: come level with it only at the thread's end and you hang just above it, weightless,
+    // sliding back along the thread's arc, and fall short when the dust wears off.)
+    const lip = L().solids.find((q) => q.thin && Math.abs(q.y1 - 12.6) < 0.01).x0 - 0.3;
+    yield* until(() => {
+      const B = b();
+      if (up(B)) return true;
+      if (B.mantle || B.y > 11.2 || (B.y > 9.9 && B.x < lip - 0.1)) { hold('KeyD'); release('KeyA'); } // (under it too soon: wait there, rising)
+      else if (B.x > lip + 0.12) { hold('KeyA'); release('KeyD'); }
+      else { release('KeyA'); release('KeyD'); }
+      return false;
+    }, 60 * 8, 'up onto the ledge');
     release('KeyD'); release('KeyA');
     say('up on the ledge');
     if (solo()) yield* callSpool();

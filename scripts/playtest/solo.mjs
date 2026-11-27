@@ -18,6 +18,7 @@ for (;;) {
   await sleep(500);
   const s = await p.evaluate(() => ({ log: window.__bot.log, done: window.__bot.done, failed: window.__bot.failed, cp: window.__tb.game.W.cp, deaths: window.__tb.game.W.deaths, phase: window.__tb.game.W.phase, x: window.__tb.game.me.b.x, y: window.__tb.game.me.b.y, fps: window.__tb.fps, state: window.__tb.state() }));
   for (; seen < s.log.length; seen++) console.log('  ', s.log[seen]);
+  for (p.told = p.told || 0; p.told < p.errors.length; p.told++) console.log(`   !! ${p.errors[p.told]}`);
   if (s.cp !== lastCp) { lastCp = s.cp; await sleep(700); await p.screenshot({ path: `${SHOTS}solo-cp${s.cp}.png` }); }
   if (process.env.EVERY && Date.now() - t0 > shots * +process.env.EVERY * 1000) { await p.screenshot({ path: `${SHOTS}solo-t${String(shots++).padStart(3, '0')}.png` }); }
   if (s.failed || Date.now() - t0 > limit) { await p.screenshot({ path: `${SHOTS}solo-fail.png` }); console.log(`FAIL: ${s.failed || 'out of time'} at lantern ${s.cp} (x=${s.x.toFixed(1)}, y=${s.y.toFixed(1)}, ${s.deaths} deaths)`, p.errors.slice(0, 5)); await browser.close(); process.exit(1); }

@@ -18,7 +18,9 @@ const st = (p) => p.evaluate(() => { const g = window.__tb.game; return { wormT:
   const p = await page(browser, `${BASE}/?q=2`);
   await p.waitForFunction(() => window.__tb && window.__tb.ready, null, { timeout: 30000 });
   await p.click('#mSolo'); await sleep(800);
-  await at(p, 3); await sleep(600);
+  // in the Meadow of Pins (chapter 2: no cold open to wait out, and its sunk traps are checked below)
+  await p.evaluate(() => { const { game } = window.__tb; game.skipCold = true; game.start({ order: [{ id: 'me', name: 'Me', slot: 0 }], meId: 'me', chapter: 1, cp: 0, runT0: 0 }); });
+  await sleep(1200);
   await p.evaluate(() => window.__tb.game.possessMe()); await sleep(300);
   let s = await st(p);
   check(s.wormT > 0 && s.wormed[0] && /IN YOUR HEAD/.test(s.hint), `alone: a worm gets in (hint "${s.hint.slice(0, 40)}…", red ${s.dread})`);
@@ -30,7 +32,7 @@ const st = (p) => p.evaluate(() => { const g = window.__tb.game; return { wormT:
   check(s.deaths === 1, `alone: left in, it takes you after ~5.5 s (deaths ${s.deaths}, phase ${s.phase})`);
   // the hidden traps of the meadow
   await sleep(3000);
-  await at(p, 1); await sleep(800);
+  await at(p, 0); await sleep(800);
   const trap = await p.evaluate(() => { const g = window.__tb.game, i = g.L.traps.findIndex((t) => t.hidden), t = g.L.traps[i], o = g.scene.traps[i]; return { i, x: t.x, far: o.e.getLocalPosition().y - t.y }; });
   await p.evaluate((x) => { const b = window.__tb.game.me.b; b.x = x - 1.0; }, trap.x); await sleep(500);
   const near = await p.evaluate((i) => { const g = window.__tb.game; return g.scene.traps[i].e.getLocalPosition().y - g.L.traps[i].y; }, trap.i);
@@ -52,7 +54,8 @@ async function pair() {
   await a.waitForFunction(() => window.__tb.net.players.length === 2, null, { timeout: 10000 });
   await a.click('#lStart');
   for (const p of [a, b]) await p.waitForFunction(() => window.__tb.state() === 'play' && window.__tb.game.n === 2, null, { timeout: 10000 });
-  await sleep(1500);
+  for (const p of [a, b]) await p.waitForFunction(() => window.__tb.game.coldT == null && window.__tb.game.T() > 0, null, { timeout: 15000 }); // (the cold open: nothing can happen to anyone yet)
+  await sleep(500);
   return [a, b];
 }
 {
@@ -61,10 +64,13 @@ async function pair() {
   const sa = await st(a);
   check(sa.wormed[1] && /A worm has/.test(sa.hint), `two: the other sees the worm in B ("${sa.hint.slice(0, 34)}…")`);
   // A stands still; the worm walks B into A and strikes
-  await a.waitForFunction(() => window.__tb.game.W.phase === 'dead', null, { timeout: 9000 }).catch(() => {});
-  const toast = await a.evaluate(() => document.getElementById('toast').textContent);
+  // (struck, A is down first: six seconds in which a friend could stitch them back; nobody does)
+  await a.waitForFunction(() => window.__tb.game.W.down != null || window.__tb.game.W.phase === 'dead', null, { timeout: 9000 }).catch(() => {});
+  const down = await a.evaluate(() => document.getElementById('toast').textContent);
+  check(/six seconds/.test(down), `two: B's worm walks B over and strikes A down ("${down}")`);
+  await a.waitForFunction(() => window.__tb.game.W.phase === 'dead', null, { timeout: 12000 }).catch(() => {});
   const s = await st(a);
-  check(s.deaths >= 1 && /killed/.test(toast), `two: left alone, B's worm walks B over and kills A ("${toast}")`);
+  check(s.phase === 'dead' && s.deaths === 1, `two: nobody stitches A back: the thread goes cold, and it is one death, not two (deaths ${s.deaths}, phase ${s.phase})`);
   await sleep(3500);
   // again, and this time A rips it out
   await b.evaluate(() => window.__tb.game.possessMe());

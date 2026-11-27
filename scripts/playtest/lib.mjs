@@ -20,7 +20,7 @@ export async function page(browser, url, { viewport = { width: 1280, height: 720
   if (!process.env.TB_FRESH) await ctx.addInitScript(() => { try { localStorage.setItem('tb.story', '1'); localStorage.setItem('tb.trial', 'done'); } catch { /* */ } });
   const p = await ctx.newPage();
   p.errors = [];
-  p.on('pageerror', (e) => p.errors.push(`pageerror: ${e.message}`));
+  p.on('pageerror', (e) => p.errors.push(`pageerror: ${e.message}${e.stack ? ` (${e.stack.split('\n').slice(1, 3).map((l) => l.trim()).join(' < ')})` : ''}`));
   p.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') p.errors.push(`${m.type()}: ${m.text()}`); });
   await p.goto(url);
   return p;

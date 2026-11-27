@@ -312,8 +312,8 @@ export class Game {
       return;
     }
     W.down = null;
-    (W.causes ||= {})[why] = (W.causes[why] || 0) + 1;
-    W.deaths++;
+    // (a body gone cold was counted when it went down, under what took it: not a second death)
+    if (why !== 'cold') { (W.causes ||= {})[why] = (W.causes[why] || 0) + 1; W.deaths++; }
     if (why === 'cut') W.cut++;
     this.host.wormed = {}; this.host.latched = {}; this.host.rot = {}; this.host.grub = {};
     this.host.respawnAt = this.T() + (why === 'caged' ? 2.6 : 2.0);
@@ -360,7 +360,7 @@ export class Game {
       const i = +k, p = this.players[i];
       if (!p || p.b.dead) continue;
       if (T - t0 > ROT) { delete H.rot[k]; this.kill(i, 'rot', p.b.x, p.b.y); return; }
-      for (const j of [i - 1, i + 1]) { const q = this.players[j]; if (!q || q.b.dead || H.rot[j] != null) continue; if (T - t0 > Math.hypot(q.b.x - p.b.x, q.b.y - p.b.y) / ROT_SPEED + 0.6) { H.rot[j] = T; this.emit({ t: 'rot', who: j, on: true, t0: T, from: i }); } }
+      for (const j of [i - 1, i + 1]) { const q = this.players[j]; if (!q || q.b.dead || H.rot[j] != null) continue; if (T - t0 > Math.hypot(q.b.x - p.b.x, q.b.y - p.b.y) / ROT_SPEED + 0.6) { H.rot[j] = T; this.emit({ t: 'rot', who: j, on: true, t0: T, via: i }); } }
     }
     // a drum set turning by its lever: once
     for (const r of L.rooms) if (r.lever && W.open[r.lever] && W.turnAt[r.id] == null) { W.turnAt[r.id] = T + WARN; this.emit({ t: 'turnAt', id: r.id, t0: W.turnAt[r.id] }); }
@@ -457,7 +457,7 @@ export class Game {
       case 'gbite': { sfx.play('chomp', { x: e.x }); fx.shake(0.7); fx.burst('dust', e.x, this.mon[e.mi].y + 0.2, 0.4, 16, { spread: 1.5, power: 1.2 }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.4, 0.4, 8, { power: 1 }); break; }
       case 'gdead': this.hud.achieve?.('glutton'); sfx.play('roar', { x: e.x, vol: 0.8 }); sfx.play('crash', { x: e.x }); fx.burst('ink', e.x, this.mon[e.mi].y + 0.5, 0.3, 40, { power: 1.6, dir: [0, 1.2, 0] }); fx.shake(0.9); break;
       case 'bloom': { W.blooms[e.k] = true; const bl = L.blooms[e.k]; sfx.play('burst', { x: bl.x, vol: 0.6 }); sfx.play('flutter', { x: bl.x }); fx.burst('spore', bl.x, bl.y + 0.3, 0.3, 30, { power: 1.2, dir: [0, 0.6, 0] }); break; }
-      case 'rot': { const p = this.players[e.who]; if (!p) break; p.rot = e.on ? e.t0 : null; if (e.on) { sfx.play('squelch', { x: p.b.x }); if (p.me) this.hud.flash('#4d5a3a', 0.35, 200); if (e.from != null && p.me) this.hud.toast(`The rot came down the thread from ${this.players[e.from].name}.`); } else { sfx.play('splash', { x: p.b.x }); fx.burst('drop', p.b.x, p.b.y + 0.8, 0.4, 10); } break; }
+      case 'rot': { const p = this.players[e.who]; if (!p) break; p.rot = e.on ? e.t0 : null; if (e.on) { sfx.play('squelch', { x: p.b.x }); if (p.me) this.hud.flash('#4d5a3a', 0.35, 200); if (e.via != null && p.me && this.players[e.via]) this.hud.toast(`The rot came down the thread from ${this.players[e.via].name}.`); /* via, not from: the server stamps `from` on every relayed message */ } else { sfx.play('splash', { x: p.b.x }); fx.burst('drop', p.b.x, p.b.y + 0.8, 0.4, 10); } break; }
       case 'swarm': this.cap('[squealing, everywhere]', L.swarms[e.k].x0); W.swarm[e.k] = true; sfx.play('squeal', { x: L.swarms[e.k].x0, vol: 1.6 }); sfx.play('squeal', { x: L.swarms[e.k].x1, vol: 1.4 }); fx.shake(0.25); break;
       case 'lamp': { const l = L.lamps[e.k]; if (!l) break; l.by = e.by; if (e.by < 0) { l.x = e.x; l.y = e.y; } sfx.play(e.by >= 0 ? 'hook' : e.toss ? 'cloth' : 'plate', { x: e.x }); if (e.toss) fx.burst('ember', e.x, e.y + 0.5, 0.3, 8); break; }
       case 'shut': { W.open[e.id] = false; const g = L.gates.find((q) => q.id === e.id); if (g) { sfx.play('gate', { x: g.x }); fx.shake(0.5); } break; }

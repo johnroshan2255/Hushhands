@@ -59,28 +59,51 @@ reach the body and hold USE; the downed can twitch to show where they are), ping
 **proximity voice** (WebRTC, off by default, distance, water and death change it).
 
 **Reach**: captions for the sounds that matter, achievements (eleven), phone vibration, streamer
-mode, clips (C: the last ~20 s as a .webm, on stronger machines), what took you on the end screen.
+mode, clips (C: the last ~20 s as a .webm, on stronger machines), **photo mode** (O: the moment held
+still when alone, the screen bare, the camera free with the arrows and + / −, ENTER keeps a .png),
+what took you on the end screen.
 
 ## What was checked
 
-Headless Chrome on Windows, against the built game, with the code-player pressing real keys:
-- **The whole journey alone, all fifteen chapters, in one run: 0 deaths**, 10 min 22 s of bot time,
+Headless Chrome, against the built game, with the code-player pressing real keys (first on Windows at
+144 Hz; all of it again on 2026-11-27 on a Mac at 60 Hz, which is where the stalls below showed):
+- **The whole journey alone, all fifteen chapters, in one run: 0 deaths**, 10 min 30 s of bot time,
   8 of the 12 buttons picked up on the way, end screen *The Whole Doll*.
+- **The whole journey together, unbroken from chapter 1, with two, with three and with four: each 0
+  deaths**, end screen *Unbroken*, everyone back in the lobby after (11 min 27 s, 11 min 50 s,
+  12 min 26 s). What stopped these before was the bots, not the game, and it only showed at 60 Hz:
+  the swinger at the Chasm walked back off the far ledge (the thread, still short from the climb,
+  tugs you for a frame as you stand up); at the Mill's crate one asked "am I on the crate?" in
+  mid-air, for ever; one swam a flash ahead of the rest and was held in the eel's reach by the thread;
+  at the moth-dust they came level with the ledge too late and hung just over it (now: drift across
+  early and pull up at its lip); three in the Larder ran out of patience before the others had
+  reached the last sack, and walked over the meat as the Glutton came up for it; the last of four
+  reached a lantern after the others had gathered and gone; the fourth stood on a stair's lip.
+- **Found by these runs, in the game, and fixed**: rot reaching a guest threw an error in their
+  browser (the server stamps `from` on every relayed event, over the event's own `from`; it is `via`
+  now, and the line "the rot came down the thread from…" shows); a body nobody stitched back was
+  counted as two deaths, the second under "cold" on the end screen (one now); photo mode opened
+  under the pause or *i* panel set the game running behind the panel when left, ESC and I opened
+  panels over the bare screen, and together the arrows walked your doll as they moved the camera.
+- **Photo mode** (`photo.mjs`), **the worm in the head** (`worm.mjs`, brought up to date with
+  chapters and restitch), a guest letting go with three (the two left go on to the end, 0 deaths)
+  and the host letting go (`leave.mjs`): pass.
 - **Two players through every new chapter** (from the Mill to the end, in stretches): passes, after
   fixes found this way (stale positions from the chapter before, levers further apart than the
   thread, the Granary's lamp lost after a death). The last stretch, the Upturned Loom to the Wind
   ending: 0 deaths, *Unbroken*.
+- **Three and four players through every new chapter** (in stretches): pass. The fixes this found:
+  the Cistern now shuts only when all of you are inside (it used to shut on the first, leaving the
+  rest outside), its wheels are ordered so neighbours on the thread can reach theirs, and the
+  moth-dust ledge was lowered a metre so a chain of four can hold one another up to it.
 - **Slow machines** (`scripts/playtest/perf.mjs`, Chrome's CPU throttling, the bot playing each
   chapter's busiest stretch, 800×400): with the CPU 4× slower, every chapter holds 144 fps at the
-  lowest quality; 12× slower, 21–44 fps (the Fen and the Dye-Works lowest).
+  lowest quality; 12× slower, 21–44 fps (the Fen and the Dye-Works lowest). (On the Mac: 60 of 60
+  at 4× slower.)
 - **Every screen shape** (`views.mjs`, nine: phones both ways, a small old phone, tablets, desktop,
   square, ultrawide): title, together panel, play and the settings panel all fit.
 - Two and four players through the eight original chapters: pass (2: 2 deaths at the shears/bells;
   4: 9 deaths, mostly the shears).
-- A single unbroken two-player run from chapter 1 has not finished yet: the two bots sometimes stall
-  at the Mill's crate (one fails to get from the crate to the ledge) or in the Fen (both wait for a
-  Drinker to notice them). Both are the test bots' coordination; every chapter has been passed by
-  two players in stretches.
 - Restitch between two browsers: one down, the other stitches, play goes on.
 - Voice between two browsers (fake microphone): peers connect, volume follows distance.
 - Each new creature and place was looked at in screenshots (see the session notes).
@@ -90,10 +113,6 @@ Headless Chrome on Windows, against the built game, with the code-player pressin
 - **Nobody has played the new chapters by hand.** The difficulty is a guess: the bot gets through
   most of them first time, which probably means they are too easy for the bot and about right for a
   person, but that is only a guess. Section 16 asks for a hand-play of each with sound.
-- **Three and four players through every new chapter** (in stretches): pass. The fixes this found:
-  the Cistern now shuts only when all of you are inside (it used to shut on the first, leaving the
-  rest outside), its wheels are ordered so neighbours on the thread can reach theirs, and the
-  moth-dust ledge was lowered a metre so a chain of four can hold one another up to it.
 - Not built from section 11: the waterwheel and leeches (5), riding a fed Drinker (7), the grain
   chute (8), the scale and the collapsing floor (10), the Puppeteer lifting a doll on its strings
   (11), the hanging lake and rats down the walls (12). (Moth-dust and the upside-down crawler are built.)

@@ -1,12 +1,12 @@
 // A dry run of the chasm with no browser: two bodies, one braces at the jetty's tip, the other
 // drops, climbs the thread, swings and grabs the far ledge; then the first follows. (node only)
-import { buildLevel } from '../../src/level.js';
+import { buildChapter } from '../../src/chapters/index.js';
 import { Space, newBody, stepPlayer, stepSpool, newSpool } from '../../src/phys.js';
 
 const DT = 1 / 60;
 const none = { x: 0, y: 0, jump: false, jumpHeld: false, brace: false, sneak: false };
 function run(n) {
-  const L = buildLevel(n);
+  const L = buildChapter(2, n); // the Chasm
   const space = new Space(L);
   const tipSolid = L.solids.find((s) => s.thin && s.y1 === 0);
   const tip = tipSolid.x1, far = L.solids.find((s) => s.ground && Math.abs(s.x0 - (tip + 4.2)) < 0.01);
