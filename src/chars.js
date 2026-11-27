@@ -5,6 +5,7 @@
 import * as pc from 'playcanvas';
 import { MeshBuilder, rgba, addBox, addSphere, addLathe } from './meshes.js';
 import { worldMaterial, tintMaterial } from './render.js';
+import { model } from './models.js';
 
 const box = (mb, x0, x1, y0, y1, z0, z1, c) => addBox(mb, { x: (x0 + x1) / 2, y: (y0 + y1) / 2, z: (z0 + z1) / 2, sx: x1 - x0, sy: y1 - y0, sz: z1 - z0, col: c });
 const K = (c, k = 1, g = 0) => rgba(c[0] * k, c[1] * k, c[2] * k, g);
@@ -134,6 +135,7 @@ export class Rig {
     this.c = null; // the smoothed pose
     this.moveK = 0; this.lieK = 0; this.dip = 0; this.dipV = 0; this.wasAir = false; this.idleT = Math.random() * 10;
     this.ry = null; this.spd = 0; this.accLean = 0; this.airVy = 0;
+    this.variant = variant; this.dev = device; this.worn = false;
     app.root.addChild(this.root);
   }
 
@@ -143,7 +145,20 @@ export class Rig {
    * s: { x, y, z, facing (-1|1), speed, vx, vy, crouch, anim, t, noShadow }
    * anim: walk (idle when still) | air | hang | ropeclimb | haul | brace | fear | dead | possessed | lunge
    */
+  /** once the Blender doll has arrived, wear its pieces (the rig and its pivots are the same) */
+  wear() {
+    const M = model(this.dev, 'doll');
+    if (!M) return;
+    const P = M.parts, put = (e, k) => { if (P[k]) e.render.meshInstances[0].mesh = P[k]; };
+    put(this.pelvis, 'pelvis'); put(this.spine, 'torso'); put(this.head, `head${this.variant % 4}`);
+    for (const a of this.arms) { put(a.up, 'armU'); put(a.lo, 'armL'); }
+    for (const l of this.legs) { put(l.th, 'legU'); put(l.sh, 'legL'); put(l.ft, 'foot'); }
+    if (P.knots) { const k = new pc.Entity('knots'); k.addComponent('render', { meshInstances: [new pc.MeshInstance(P.knots, MAT)], castShadows: false }); this.spine.addChild(k); }
+    this.worn = true;
+  }
+
   pose(dt, s) {
+    if (!this.worn) this.wear();
     const HIP = DOLL.hip;
     const lie = s.anim === 'dead';
     // the body follows the physics box, but a small step up or down is eased, not snapped
@@ -292,5 +307,7 @@ export class Rig {
 /** the doll's pieces, for a body that has stopped being a doll (src/gore.js) */
 export function dollMeshes(device, variant = 0) {
   if (!MAT) { MAT = worldMaterial(); SHADOW = tintMaterial(); SHADOW.setParameter('uTint', new Float32Array([0, 0, 0, 0.42])); }
+  const M = model(device, 'doll'), P = M && M.parts;
+  if (P) return { mat: MAT, torso: P.torso, pelvis: P.pelvis, head: P[`head${variant % 4}`], armU: P.armU, armL: P.armL, legU: P.legU, legL: P.legL, foot: P.foot, dims: DOLL };
   return { mat: MAT, torso: torsoMesh(device), pelvis: pelvisMesh(device), head: headMesh(device, variant), armU: armMesh(device, false), armL: armMesh(device, true), legU: legMesh(device, false), legL: legMesh(device, true), foot: footMesh(device), dims: DOLL };
 }

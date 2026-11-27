@@ -1229,10 +1229,10 @@ export class Game {
     this.swing = Math.max(0, (this.swing || 0) - dt * 0.35);
     this.drawStrings(dt);
     const [shx, shy] = fx.shakeOffset(time);
-    if (this.photo) { const ph = this.photo; cam.setPosition(this.cam.x + ph.dx, this.cam.y + ph.dy, dist * ph.zoom); } else
+    if (this.photo) { const ph = this.photo; cam.setPosition(this.cam.x + ph.dx, this.cam.y + ph.dy, dist * ph.zoom); cam.camera.nearClip = Math.max(0.2, dist * ph.zoom - 14); } else
     cam.setPosition(this.cam.x + shx, this.cam.y + shy, dist);
     cam.setEulerAngles(0, 0, this.camRoll * 57.2958 + (this.swing > 0 ? Math.sin(this.swing * 9) * this.swing * 22 : 0));
-    cam.camera.farClip = dist + 140; cam.camera.nearClip = Math.max(1, dist - 14);
+    cam.camera.farClip = dist + 140; if (!this.photo) cam.camera.nearClip = Math.max(1, dist - 14);
     sfx.listenerX = this.cam.x;
     R.setLights(lights, this.cam.x, this.cam.y - 1.5);
     R.frame(time, { amb: [0.2, 0.215, 0.21], moon: [0, 0, 0], fogStart: -1.2, fogMul: 1, dawn: 0, moonUv: [0, 0, 0.01, 0], expo: this.hud.expo ?? 1 });
