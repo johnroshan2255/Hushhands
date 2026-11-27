@@ -21,10 +21,10 @@ export { LINK };
 export const CHAPTERS = [pit, meadow, chasm, den, mill, gears, fen, granary, dyeworks, larder, theatre, upturned, cathedral, collector, spindle];
 export const chapterIndex = (id) => Math.max(0, CHAPTERS.findIndex((c) => c.id === id));
 
-export function buildChapter(ci, n) {
+export function buildChapter(ci, n, seed = 1) {
   const i = Math.max(0, Math.min(CHAPTERS.length - 1, ci | 0));
   const C = CHAPTERS[i];
-  const k = kit(n, { id: C.id, ci: i, num: C.num, act: C.act, name: C.name, last: i === CHAPTERS.length - 1 });
+  const k = kit(n, { id: C.id, ci: i, num: C.num, act: C.act, name: C.name, last: i === CHAPTERS.length - 1, seed });
   C.build(k);
   return finish(k.L);
 }

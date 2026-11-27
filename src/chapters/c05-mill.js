@@ -44,7 +44,7 @@ export default {
     if (solo) { L.plates.push({ id: 'cis', x: 85, y: 0, w: 1.5 }); L.levers.push({ id: 'cis', x: 92, y: 0, valve: true }); }
     else {
       // wheels at different heights: some will be under water by the time the last is reached
-      const spots = [[83, 0], [89.5, 2.6], [93, 0], [86, 4.0]].slice(0, n);
+      const spots = [[83.4, 0], [88.9, 2.6], [92.6, 0], [86, 4.0]].slice(0, n);
       solid(88.3, 2.2, 90.7, 2.6); if (n >= 4) solid(84.8, 3.6, 87.2, 4.0);
       for (const [x, y] of spots) L.levers.push({ id: 'cis', x, y, valve: true });
     }

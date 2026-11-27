@@ -6,6 +6,9 @@
 // Cistern's valves) is made n wide; alone, the Spool-Lantern you drag behind you is your second body.
 export const LINK = 7; // metres of thread between two neighbours
 
+/** a small seeded random, so that every browser builds the same variations */
+export const seeded = (a) => () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+
 export function kit(n, meta = {}) {
   const nb = Math.max(2, n); // bodies that can weigh a plate down: the players, or you and your spool
   const L = {
@@ -38,7 +41,9 @@ export function kit(n, meta = {}) {
     return { r, solid: (x0, y0, x1, y1, q = {}) => { r.solids.push({ x0, y0, x1, y1, ...q }); }, kill: (x0, y0, x1, y1, why = 'fell') => r.kill.push({ x0, y0, x1, y1, why }) };
   };
   const solo = n === 1;
-  return { L, n, nb, solo, room, solid, ground, cp, gate, platesAt, deco, hint, zone, begin, exit, button, other, deadDoll };
+  // the director: this journey's own small differences (which traps are sunk, which worms are silent)
+  const rng = seeded((meta.seed || 1) * 7919 + (meta.ci || 0) * 104729);
+  return { L, n, nb, solo, rng, room, solid, ground, cp, gate, platesAt, deco, hint, zone, begin, exit, button, other, deadDoll };
 }
 
 /** after building: the level's left and right ends, and the scene's drawing range */

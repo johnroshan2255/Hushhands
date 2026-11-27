@@ -56,7 +56,7 @@
       if (o.sneak) hold('KeyS'); else release('KeyS');
       if (go) { hold(dir > 0 ? 'KeyD' : 'KeyA'); release(dir > 0 ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); }
       if (go && b().ground && wallAhead(dir) && jumpT <= 0) jumpT = 14;
-      if (go && o.hop && b().ground && o.hop(dir) && jumpT <= 0) { jumpT = 10; hopping = true; hopDir = dir; }
+      if (go && o.hop && b().ground && o.hop(dir) && jumpT <= 0) { jumpT = 15; hopping = true; hopDir = dir; }
       if (jumpT > 0) { hold('Space'); jumpT--; if (jumpT === 0) release('Space'); }
       yield;
     }
@@ -320,7 +320,7 @@
   }
   const crate = () => L().crates[0];
   /** wait at this lantern until everyone still standing is here */
-  function* gather() { const c = L().cps[W().cp]; yield* until(() => G.players.every((p) => p.b.dead || (Math.abs(p.b.x - c.x) < 3.5 && Math.abs(p.b.y - c.y) < 1)), 60 * 60, 'the others at the lantern'); }
+  function* gather() { const c = L().cps[W().cp]; yield* until(() => G.players.every((p) => p.b.dead || (p.b.ground && Math.abs(p.b.x - c.x) < 3.5 && Math.abs(p.b.y - c.y) < 0.6)), 60 * 60, 'the others at the lantern'); }
   S['mill:0'] = function* () {
     yield* walkTo(9.6, { wait: false });
     yield* swimTo(14.3, null);
@@ -387,13 +387,13 @@
   /** the one with the lamp walks to x; the rest keep close behind, inside its light */
   function* carryTo(x, o = {}) {
     if (role() === 0) {
-      if (!holding()) { yield* walkTo(lamp().x - 0.3, { wait: false }); yield* tap('KeyE', 4); yield* until(holding, 120, 'the lamp in hand'); }
+      if (!holding()) { yield* walkTo(lamp().x > 53.8 && b().x > 52.5 ? Math.max(54.1, lamp().x - 0.3) : lamp().x - 0.3, { wait: false }); yield* tap('KeyE', 4); yield* until(holding, 120, 'the lamp in hand'); }
       yield* walkTo(x, { wait: false, stop: () => others().some((m) => Math.abs(m.x - b().x) > 1.9), ...o });
     } else {
       for (let i = 0; ; i++) {
         chk();
         if (i > 60 * 60) throw new Error('stuck following the lamp');
-        const l = lamp(), tx = l.x - 0.55 * role();
+        const l = lamp(), tx = l.x > 53.8 && b().x > 52.5 ? Math.max(54.25, l.x - 0.55 * role()) : l.x - 0.55 * role();
         if (l.by >= 0 && l.x >= x - 0.3) break;
         if (Math.abs(tx - b().x) > 0.25) { const d = Math.sign(tx - b().x); hold(d > 0 ? 'KeyD' : 'KeyA'); release(d > 0 ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); }
         yield;
@@ -413,12 +413,12 @@
       yield* walkTo(lamp().x - 0.3, { wait: false }); yield* tap('KeyE', 4); yield* until(holding, 120, 'the lamp in hand');
       yield* walkTo(49.4, { wait: false });
       // run at the gap and toss it over while walking
-      hold('KeyD'); yield* until(() => b().x > 50.9, 120, 'the run-up'); key('keydown', 'KeyE'); yield* frames(3); key('keyup', 'KeyE');
+      hold('KeyD'); yield* until(() => b().x > 51.45, 120, 'the run-up'); key('keydown', 'KeyE'); yield* frames(3); key('keyup', 'KeyE');
       yield* until(() => !holding(), 60, 'the toss'); release('KeyD');
       say(`tossed to ${lamp().x.toFixed(1)}`);
-    } else yield* until(() => lamp().by < 0 && lamp().x > 54, 60 * 30, 'the lamp over the gap');
-    const hop = (dir) => b().x > 51.2 && b().x < 52 && dir > 0;
-    yield* walkTo(lamp().x - 0.4 - role() * 0.5, { wait: false, hop });
+    } else { yield* walkTo(50.6 - role() * 0.5, { wait: false }); yield* until(() => lamp().x > 53.8, 60 * 30, 'the lamp over the gap'); }
+    const hop = (dir) => b().x > 51.55 && b().x < 51.98 && dir > 0;
+    yield* walkTo(Math.max(54.3 + (N() - 1 - role()) * 0.45, lamp().x - 0.4 - role() * 0.5), { wait: false, hop });
     yield* carryTo(80.6);
     if (role() === 0) { yield* tap('KeyE', 4); }
     yield* walkTo(L().cps[2].x + 0.6 - role() * 0.6, { wait: false });
@@ -461,17 +461,19 @@
   /** creep, freezing whenever it is near */
   function* creepPast(x) { yield* walkTo(x, { sneak: true, wait: false, stop: () => Math.abs(glut().x - b().x) < 3.6 && glut().mode !== 'chew' && glut().mode !== 'dead' }); release('KeyS'); }
   /** stand in a sack, still and low, until it is quiet near me */
-  function* hide() { hold('KeyS'); yield* frames(10); yield* until(() => !busy(glut()) || Math.abs(glut().x - b().x) > 6, 60 * 20, 'it going quiet'); yield* frames(20); release('KeyS'); }
+  function* hide() { hold('KeyS'); yield* frames(10); yield* until(() => !busy(glut()) || Math.abs(glut().x - b().x) > 6, 60 * 20, 'it going quiet'); yield* frames(20); } // (and still hidden, until it is time to move)
   S['larder:0'] = function* () { yield* creepPast(L().cps[1].x + 0.4 - role() * 0.5); };
   S['larder:1'] = function* () {
     yield* gather();
     for (const s of L().sacks.filter((q) => q.x < 46)) {
       // go when it is far, or busy somewhere else
-      yield* until(() => Math.abs(glut().x - b().x) > 7 || (busy(glut()) && Math.abs(glut().tx - b().x) > 3), 60 * 30, 'a moment to move');
+      yield* until(() => G.players.every((p) => Math.abs(glut().x - p.b.x) > (N() > 1 ? 9 : 7)) || (busy(glut()) && Math.abs(glut().tx - b().x) > 3), 60 * 40, 'a moment to move');
+      release('KeyS');
       yield* walkTo(s.x - role() * 0.3, { wait: false, tol: 0.12 });
       yield* hide();
     }
-    yield* until(() => Math.abs(glut().x - b().x) > 6, 60 * 30, 'a moment to move');
+    yield* until(() => G.players.every((p) => Math.abs(glut().x - p.b.x) > (N() > 1 ? 9.5 : 6)), 60 * 40, 'a moment to move');
+    release('KeyS');
     yield* walkTo(L().cps[2].x + 0.4 - role() * 0.5, { wait: false });
   };
   S['larder:2'] = function* () {
@@ -571,7 +573,7 @@
     yield* gather();
     const up = (q) => q.ground && q.y > 13.4;
     if (solo()) { yield* walkTo(150.4, { wait: false }); yield* setSpool(); }
-    else { hold('ShiftLeft'); yield* until(() => G.players.every((p) => p.i >= role() || up(p.b)), 60 * 60, 'the ones before me up'); release('ShiftLeft'); }
+    else { yield* walkTo(150.65 - (role() - 1) * 0.5, { wait: false }); hold('ShiftLeft'); yield* until(() => G.players.every((p) => p.i >= role() || up(p.b)), 60 * 60, 'the ones before me up'); release('ShiftLeft'); }
     yield* walkTo(152.6, { wait: false });
     yield* until(() => b().floatT > 0, 120, 'the dust');
     yield* until(() => { const B = b(); if (up(B)) return true; if (B.y > 12.3) { hold('KeyD'); release('KeyA'); } else if (B.x > 154.9) { hold('KeyA'); release('KeyD'); } else { release('KeyA'); release('KeyD'); } return false; }, 60 * 8, 'up onto the ledge');

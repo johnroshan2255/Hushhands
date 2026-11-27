@@ -60,12 +60,13 @@ export class Game {
 
   // ------------------------------------------------------------------ setting out
   /** order: [{ id, name, slot }] along the thread; startedAt: server ms (online) or null */
-  start({ order, meId, startedAt = null, chapter = 0, cp = 0, open = {}, tripped = false, deaths = 0, cut = 0, attract = false, runT0 = null, found = [] }) {
+  start({ seed = null, order, meId, startedAt = null, chapter = 0, cp = 0, open = {}, tripped = false, deaths = 0, cut = 0, attract = false, runT0 = null, found = [] }) {
     this.stop();
     const app = this.app, n = order.length;
     this.n = n;
     this.ci = Math.max(0, Math.min(CHAPTERS.length - 1, chapter | 0));
-    this.L = buildChapter(this.ci, n);
+    this.seed = seed ?? this.seed ?? 1;
+    this.L = buildChapter(this.ci, n, this.seed);
     this.order = order;
     const L = this.L;
     this.space = new Space(L);
@@ -132,7 +133,7 @@ export class Game {
   saveNow() {
     if (this.attract || !this.W || !this.onSave) return;
     const W = this.W;
-    this.onSave({ thread: this.thread || 1, chapter: this.L.id, ci: this.ci, lantern: W.cp, deaths: W.deaths, cuts: W.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: W.found });
+    this.onSave({ seed: this.seed, thread: this.thread || 1, chapter: this.L.id, ci: this.ci, lantern: W.cp, deaths: W.deaths, cuts: W.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: W.found });
   }
   stop() {
     if (!this.running && !this.scene) return;
@@ -175,6 +176,7 @@ export class Game {
     if (!this.running) return;
     const p = this.players.find((q) => q.id === m.from);
     if (!p || p.me) return;
+    if (m.c != null && m.c !== this.ci) return; // (from the chapter before: they have not caught up yet)
     const b = p.b, f = m.f | 0;
     p.net = { x: m.x, y: m.y, vx: m.vx, vy: m.vy, t: performance.now() };
     b.vx = m.vx; b.vy = m.vy; b.ground = !!(f & F.ground); b.braced = !!(f & F.braced); b.sneak = !!(f & F.sneak); b.facing = f & F.right ? 1 : -1;
@@ -190,12 +192,12 @@ export class Game {
     this.sendT = 0.05;
     const f = (b.ground ? F.ground : 0) | (b.braced ? F.braced : 0) | (b.sneak ? F.sneak : 0) | (b.facing > 0 ? F.right : 0) | (b.hang ? F.hang : 0) | (b.mantle ? F.mantle : 0) | (this.me.use ? F.use : 0) | (b.climbing ? F.climb : 0) | (b.taut ? F.taut : 0) | (b.dark > 0 ? F.dark : 0) | (b.hidden ? F.hidden : 0);
     const r2 = (v) => Math.round(v * 100) / 100;
-    this.send('p', { x: r2(b.x), y: r2(b.y), vx: r2(b.vx), vy: r2(b.vy), f, r: r2(b.reel), rt: b.reelTo, n: r2(this.noiseOut) });
+    this.send('p', { c: this.ci, x: r2(b.x), y: r2(b.y), vx: r2(b.vx), vy: r2(b.vy), f, r: r2(b.reel), rt: b.reelTo, n: r2(this.noiseOut) });
     this.noiseOut = 0;
   }
   onSnapshot(m) {
     const W = this.W, L = this.L;
-    if (m.ep !== W.epoch) return;
+    if (m.ep !== W.epoch || (m.c != null && m.c !== this.ci)) return;
     for (const id of m.o) W.open[id] = true;
     W.plates = unbits(m.pl, L.plates.length); W.levers = unbits(m.lv, L.levers.length); W.traps = unbits(m.tr, L.traps.length); W.rings = unbits(m.rg, L.rings.length);
     W.slabs = m.sl; W.wake = m.wk; W.wT0 = m.w0 || {}; W.cp = Math.max(W.cp, m.cp); W.deaths = m.d;
@@ -212,7 +214,7 @@ export class Game {
     if (!this.running || !this.isHost || this.attract) return;
     const order = this.players.filter((p) => p.id !== id).map((p) => ({ id: p.id, name: p.name, slot: p.slot }));
     if (order.length === this.players.length) return;
-    this.emit({ t: 'regroup', order, chapter: this.ci, cp: this.W.cp, open: this.W.open, tripped: this.W.tripped, deaths: this.W.deaths, cut: this.W.cut, runT0: this.runT0, found: this.W.found });
+    this.emit({ t: 'regroup', seed: this.seed, order, chapter: this.ci, cp: this.W.cp, open: this.W.open, tripped: this.W.tripped, deaths: this.W.deaths, cut: this.W.cut, runT0: this.runT0, found: this.W.found });
   }
 
   // ------------------------------------------------------------------ what the host decides
@@ -429,7 +431,7 @@ export class Game {
     if (H.snapT <= 0 && this.net.online) {
       H.snapT = 0.1;
       this.snapX = L.crates.length ? L.crates.map((c) => [Math.round(c.x * 100) / 100, Math.round(c.y * 100) / 100]) : undefined;
-      this.send('s', { ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX, ta: L.rooms.length ? W.turnAt : undefined, sw: L.swarms.length ? bits(W.swarm) : undefined, bl: L.blooms.length ? bits(W.blooms) : undefined, mt: L.meat.length ? W.meat.slice() : undefined, lp: L.lamps.length ? L.lamps.map((l) => [Math.round(l.x * 100) / 100, Math.round(l.y * 100) / 100, l.by]) : undefined });
+      this.send('s', { c: this.ci, ep: W.epoch, o: Object.keys(W.open).filter((k) => W.open[k]), pl: bits(W.plates), lv: bits(W.levers), tr: bits(W.traps), rg: bits(W.rings), sl: W.slabs, wk: Math.round(W.wake * 100) / 100, w0: W.wT0, cp: W.cp, d: W.deaths, m: this.mon.map(packMonster), cr: this.snapX, ta: L.rooms.length ? W.turnAt : undefined, sw: L.swarms.length ? bits(W.swarm) : undefined, bl: L.blooms.length ? bits(W.blooms) : undefined, mt: L.meat.length ? W.meat.slice() : undefined, lp: L.lamps.length ? L.lamps.map((l) => [Math.round(l.x * 100) / 100, Math.round(l.y * 100) / 100, l.by]) : undefined });
     }
   }
 
@@ -498,7 +500,7 @@ export class Game {
       case 'respawn': this.onRespawn(e); break;
       case 'win': W.phase = 'won'; this.wonT = 0; this.result = e; sfx.play('win'); break;
       case 'chapter': this.onChapter(e); break;
-      case 'regroup': if (!this.isHost || e.order.length !== this.players.length) this.start({ order: e.order, meId: this.net.id, startedAt: this.startedAt, chapter: e.chapter, cp: e.cp, open: e.open, tripped: e.tripped, deaths: e.deaths, cut: e.cut, runT0: e.runT0, found: e.found }); this.hud.toast(e.order.length === 1 ? 'You go on alone, with a spool.' : 'One of you is gone. The thread is retied.'); break;
+      case 'regroup': if (!this.isHost || e.order.length !== this.players.length) this.start({ seed: e.seed, order: e.order, meId: this.net.id, startedAt: this.startedAt, chapter: e.chapter, cp: e.cp, open: e.open, tripped: e.tripped, deaths: e.deaths, cut: e.cut, runT0: e.runT0, found: e.found }); this.hud.toast(e.order.length === 1 ? 'You go on alone, with a spool.' : 'One of you is gone. The thread is retied.'); break;
       default: break;
     }
   }
@@ -512,7 +514,7 @@ export class Game {
     this.hud.fade(1, 1.2);
     this.hud.hint(null); this.hud.use(null);
     if (!C) return;
-    const keep = { order: this.order, meId: this.net.online ? this.net.id : this.order[this.meIdx].id, startedAt: this.startedAt, chapter: next, deaths: e.d ?? this.W.deaths, cut: e.cut ?? this.W.cut, runT0: this.runT0, found: e.found || this.W.found };
+    const keep = { seed: this.seed, order: this.order, meId: this.net.online ? this.net.id : this.order[this.meIdx].id, startedAt: this.startedAt, chapter: next, deaths: e.d ?? this.W.deaths, cut: e.cut ?? this.W.cut, runT0: this.runT0, found: e.found || this.W.found };
     this.onSave?.({ chapter: C.id, ci: next, lantern: 0, deaths: keep.deaths, cuts: keep.cut, time: Math.round(this.T() - (this.runT0 ?? 0) + (this.timeBefore || 0)), players: this.n, found: keep.found });
     const was = this.L.card || CHAPTERS[this.ci].card;
     this.hud.between({ num: C.num, name: C.name, lines: was }, () => { if (this.running && this.leaving) { this.leaving = false; this.start(keep); } });
@@ -645,7 +647,8 @@ export class Game {
     for (const r of this.L.rooms) if (r.lever && this.L.cps[e.cp].x < r.x0) { W.turnAt[r.id] = null; W.open[r.lever] = false; }
     if (this.host) this.host.rot = {};
     const cpx = this.L.cps[e.cp].x;
-    for (const l of this.L.lamps) { if (!(l.x0 < cpx - 1 && l.x > cpx - 3 && l.by < 0)) { l.x = l.x0; l.y = l.y0; } l.by = -1; }
+    // lamps: one that had been carried past this lantern waits at it; the rest go home
+    { let k = 0; for (const l of this.L.lamps) { if (l.x0 < cpx - 1) { l.x = cpx + 0.8 + k * 0.9; l.y = this.L.cps[e.cp].y; k++; } else { l.x = l.x0; l.y = l.y0; } l.by = -1; } }
     this.bellAt = {}; this.bellMine = {}; this.dying = false; this.cutT = 0;
     for (const p of this.players) { p.wormed = false; p.lungeT = 0; p.latched = null; p.b.dark = 0; }
     this.wormT = 0; this.shakeOut = 0; this.lungeT = 0; this.wormSafe = 1; this.latchT = 0;

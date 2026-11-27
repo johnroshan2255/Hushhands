@@ -9,7 +9,9 @@ export default {
     const m0 = 6;
     ground(0, m0 + 96, y);
     // every other trap lies under the grass and only shows itself when you are all but on it
-    for (const [i, dx] of [5, 10.4, 14, 20.5, 25, 28.6].entries()) L.traps.push({ x: m0 + dx, y, hidden: i % 2 === 1 });
+    // half the traps lie sunk under the grass; which half, this journey decides
+    const sunk = [0, 1, 2, 3, 4, 5].sort(() => k.rng() - 0.5).slice(0, 3);
+    for (const [i, dx] of [5, 10.4, 14, 20.5, 25, 28.6].entries()) L.traps.push({ x: m0 + dx + (k.rng() - 0.5) * 0.6, y, hidden: sunk.includes(i) });
     deco('grass', m0 - 2, y, { w: 36 });
     deadDoll(m0 + 17.2, y, { trap: true });
     for (const [i, dx] of [36, 40.2, 44.4].entries()) L.worms.push({ x: m0 + dx, y, dir: 1, period: 3.4, up: 1.1, off: i * 1.1, len: 2.6 });

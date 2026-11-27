@@ -37,7 +37,7 @@ export default {
     // 3. the strings: every lever at once, under its light
     pup(69, { x0: 61, x1: 77, period: 6.2 });
     if (solo) { L.plates.push({ id: 'strings', x: 66, y, w: 1.5 }); L.levers.push({ id: 'strings', x: 71.5, y }); }
-    else for (let i = 0; i < n; i++) L.levers.push({ id: 'strings', x: 65 + (i * 8) / Math.max(1, n - 1), y });
+    else for (let i = 0; i < n; i++) L.levers.push({ id: 'strings', x: 65 + (i * 5) / Math.max(1, n - 1), y });
     L.candles.push({ x: 61.5, y });
     hint(60, 64, solo ? 'strings1' : 'strings');
     gate(79, y, 'strings', 7);

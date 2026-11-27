@@ -280,6 +280,7 @@ async function boot() {
     if (fresh && !from) { const slot = saves.freeSlot(); saves.erase(slot); saves.setCurrent(slot); }
     const ci = from ? from.ci ?? 0 : 0;
     game.thread = from?.thread ?? saves.read(saves.current())?.thread ?? 1;
+    game.seed = from?.seed ?? (fresh || !from ? (Math.random() * 1e9) | 0 : game.seed);
     if (from || fresh || !game.running || !game.attract || game.n !== 1 || game.ci !== 0) game.start({ order: soloOrder(), meId: 'me', runT0: 0, chapter: ci, cp: from?.lantern ?? 0, deaths: from?.deaths ?? 0, cut: from?.cuts ?? 0, found: from?.found ?? [] }); else game.begin();
     game.timeBefore = from?.time ?? 0;
     if (game.thread > 1 && (from?.ci ?? 0) === 0) hud.toast('The Second Thread. Some things have changed.');
@@ -568,7 +569,7 @@ async function boot() {
     const order = run.order.map((id) => net.players.find((p) => p.id === id)).filter(Boolean).map((p) => ({ id: p.id, name: p.name, slot: p.slot }));
     if (!order.length) return;
     show('pause', false);
-    game.start({ order, meId: net.id, startedAt: run.startedAt, runT0: 0, chapter: run.chapter | 0, cp: run.cp | 0, deaths: run.deaths | 0, found: run.found || [] });
+    game.start({ seed: (run.startedAt % 1e9) | 0, order, meId: net.id, startedAt: run.startedAt, runT0: 0, chapter: run.chapter | 0, cp: run.cp | 0, deaths: run.deaths | 0, found: run.found || [] });
     game.timeBefore = run.time | 0;
     setState('play');
     portal.inRoom(net.code, false);
