@@ -518,17 +518,17 @@ headless or watched (`TB_SHOW=1`). A chapter is done when:
 
 Each phase ends playable, tested and committed.
 
-| Phase | What | Rough size |
+| Phase | What | State (2026-11-27) |
 |---|---|---|
-| **0. Foundation** | chapters as files; saves (slots, Continue, Chapters, every lantern, multiplayer continue); story cards; GLB loading; the Blender pipeline with the Drinker; the new doll with ragdoll and gore (`gore.js`), the gore setting | 3 to 4 sessions |
-| **1. Act I and II** | the cold open and the Other Doll; extend Ch. 2 and 3; Ch. 5 Drowned Mill with the Cistern; Ch. 7 Fen; restitch, ping and emotes | 5 to 6 sessions |
-| **2. Act III** | Ch. 8 Granary, Ch. 9 Dye-Works, Ch. 10 Larder; proximity voice | 5 to 6 sessions |
-| **3. Act IV** | Ch. 11 Theatre; Ch. 12 Upturned Loom (gravity, turns, weightless) | 4 to 5 sessions |
-| **4. Act V and the ending** | Ch. 15 tower and the Moth Mother; the Weaver; three endings; buttons; the mysteries' answers | 3 to 4 sessions |
-| **5. Shapes** | the Collector and the Crawler remade in Blender; every new creature made there from the start | alongside |
-| **6. Reach** | director, clips and death replays, achievements, captions, haptics, streamer mode, stats screen | 2 to 3 sessions |
-| **7. Polish** | sound for everything, difficulty from hand-play, real low-end phones and laptops, CrazyGames | 2 to 3 sessions |
-| **Later** | Second Thread, One Thread, the Daily Thread, leaderboards, cosmetics, Twitch votes, photo mode | |
+| **0. Foundation** | chapters as files; saves (slots, Continue, Chapters, every lantern, multiplayer continue); story cards; model loading; the Blender pipeline with the Drinker; bodies that stay (`gore.js`), the gore setting | done |
+| **1. Act I and II** | the cold open and the Other Doll; extend Ch. 2; Ch. 5 Drowned Mill with the Cistern; Ch. 7 Fen; restitch, ping and emotes | done (not built: the waterwheel, riding a Drinker) |
+| **2. Act III** | Ch. 8 Granary, Ch. 9 Dye-Works, Ch. 10 Larder; proximity voice | done (not built: the grain chute, the scale, the collapsing floor) |
+| **3. Act IV** | Ch. 11 Theatre; Ch. 12 Upturned Loom (gravity, turns, weightless) | done (not built: the hanging lake, rats down the walls, lifting on strings) |
+| **4. Act V and the ending** | Ch. 15 tower and the Moth Mother; the Weaver; three endings; buttons; the mysteries' answers | done |
+| **5. Shapes** | the Collector, the Crawler and the doll remade in Blender; every new creature made there | done |
+| **6. Reach** | director, clips, achievements, captions, haptics, streamer mode, stats screen | done (not built: death replays) |
+| **7. Polish** | sound for everything, difficulty from hand-play, real low-end phones and laptops, CrazyGames | open: needs people and devices |
+| **Later** | Second Thread, One Thread, the Daily Thread, leaderboards, cosmetics, Twitch votes, photo mode | built: Second Thread (simple), One Thread, the Daily Thread with a board, photo mode |
 
 ## 18. Open questions
 

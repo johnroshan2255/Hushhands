@@ -96,9 +96,9 @@ Headless Chrome on Windows, against the built game, with the code-player pressin
   moth-dust ledge was lowered a metre so a chain of four can hold one another up to it.
 - Not built from section 11: the waterwheel and leeches (5), riding a fed Drinker (7), the grain
   chute (8), the scale and the collapsing floor (10), the Puppeteer lifting a doll on its strings
-  (11), the hanging lake, rats down the walls and the upside-down crawler (12). (Moth-dust is built.)
-- Section 12's remakes: the Collector and the Needle-Crawler now wear Blender bodies (their limbs
-  stay procedural); the doll itself is still built in code.
+  (11), the hanging lake and rats down the walls (12). (Moth-dust and the upside-down crawler are built.)
+- Section 12's remakes are done: the doll, the Collector and the Needle-Crawler are Blender models
+  now (the Collector's and the Crawler's long limbs stay procedural, moved by IK).
 - A small director is built (each journey's seed changes which traps are sunk and which worms are
   silent; everyone in a room builds from the host's). *Second Thread* is built simply (no Other Doll
   ahead of you any more). *One Thread* (no lanterns inside a chapter) is a kind of journey; **the Daily Thread** is one
