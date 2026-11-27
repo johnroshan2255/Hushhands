@@ -31,7 +31,7 @@ for (const [name, width, height, touch] of VIEWS) {
   await p.keyboard.down('KeyD'); await sleep(2200); await p.keyboard.up('KeyD');
   await sleep(900);
   await p.screenshot({ path: `${SHOTS}view-${name}-3play.png` });
-  out.push(...(await fit('#bPause, #hint, #touch .tb:not([hidden]), #stick')));
+  out.push(...(await fit('#bPause, #bInfo, #bFull, #hint, #touch .tb:not([hidden]), #stick')));
   const doll = await p.evaluate(() => { const g = window.__tb.game, a = g.project(g.me.b.x, g.me.b.y), b = g.project(g.me.b.x, g.me.b.y + 1.15); return { x: Math.round(a[0]), y: Math.round(a[1]), h: Math.round(a[1] - b[1]) }; });
   if (touch) await p.tap('#bPause'); else await p.click('#bPause');
   await sleep(500);

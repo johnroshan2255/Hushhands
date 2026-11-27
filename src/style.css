@@ -114,7 +114,7 @@ input[type=range]::-moz-range-thumb { width: 1.15rem; height: 1.15rem; border: 0
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
 .round { position: absolute; top: calc(0.7rem + var(--safe-t)); right: calc(0.8rem + var(--safe-r)); width: 2.7rem; height: 2.7rem; border-radius: 50%; border: 1.5px solid rgba(205, 213, 210, 0.55); background: rgba(8, 10, 10, 0.45); display: flex; align-items: center; justify-content: center; gap: 0.3rem; pointer-events: auto; }
 .round i { width: 0.22rem; height: 0.9rem; background: var(--fog); border-radius: 1px; }
-#roomChip { position: absolute; top: calc(0.95rem + var(--safe-t)); right: calc(4.1rem + var(--safe-r)); font-size: 0.74rem; letter-spacing: 0.24em; color: var(--fog); background: rgba(8, 10, 10, 0.45); padding: 0.45rem 0.7rem; border-radius: 2px; }
+#roomChip { position: absolute; top: calc(0.95rem + var(--safe-t)); right: calc(7.4rem + var(--safe-r)); font-size: 0.74rem; letter-spacing: 0.24em; color: var(--fog); background: rgba(8, 10, 10, 0.45); padding: 0.45rem 0.7rem; border-radius: 2px; }
 #card { position: absolute; left: 0; right: 0; top: 17%; text-align: center; opacity: 0; transition: opacity 1.2s ease; color: var(--ink); }
 #card.on { opacity: 1; }
 #card b { display: block; font-family: var(--serif); font-weight: 500; font-size: clamp(1.6rem, 4.6vw, 3.1rem); letter-spacing: 0.4em; margin-right: -0.4em; }
@@ -163,6 +163,18 @@ body.touching #hint { bottom: auto; top: calc(0.8rem + var(--safe-t)); max-width
 /* ---------- i, the story, the trial ---------- */
 .round.infoBtn { right: calc(4.1rem + var(--safe-r)); font-family: var(--serif); font-style: italic; font-size: 1.25rem; color: var(--fog); }
 #menu .round.infoBtn { right: auto; left: calc(0.8rem + var(--safe-l)); }
+
+/* ---------- full screen: the corner itself; in play, pause and i move one place in ---------- */
+#bFull { position: fixed; z-index: 12; } /* (over the title and end screens, which are 10; under the panels, 20) */
+#bFull svg { width: 1.15rem; height: 1.15rem; fill: none; stroke: var(--fog); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+#bFull .out, #bFull.on .in { display: none; }
+#bFull.on .out { display: block; }
+body.hasfull #hud .round { right: calc(4.1rem + var(--safe-r)); }
+body.hasfull #hud .round.infoBtn { right: calc(7.4rem + var(--safe-r)); }
+body.hasfull #roomChip { right: calc(10.7rem + var(--safe-r)); }
+body.photo #bFull, body.photo #fullNote { display: none !important; }
+#fullNote { position: fixed; z-index: 12; top: calc(3.9rem + var(--safe-t)); right: calc(0.8rem + var(--safe-r)); max-width: min(17rem, 80vw); background: rgba(8, 10, 10, 0.86); color: var(--fog); padding: 0.6rem 0.85rem; font-size: 0.82rem; line-height: 1.45; border-top: 2px solid var(--amber); }
+@media (max-width: 520px) { body.hasfull #trial { top: calc(3.9rem + var(--safe-t)); } } /* (a narrow screen: the trial's card goes under the three buttons, not behind them) */
 .panel.wide { width: min(40rem, 100%); gap: 0.6rem; }
 .panel.wide h3 { font-size: 0.72rem; letter-spacing: 0.24em; color: var(--amber); margin-top: 0.5rem; }
 .panel.wide p, .panel.wide li { font-size: 0.88rem; line-height: 1.55; color: var(--fog); }
