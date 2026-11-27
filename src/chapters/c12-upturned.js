@@ -20,6 +20,9 @@ export default {
     A.solid(24, 6.4, 52, 7); // its far side
     A.solid(24, 3.6, 24.6, 6.4); A.solid(51.4, 3.6, 52, 6.4); // its ends, with a way through at the floor
     A.solid(43, 1.75, 45, 6.4); // a beam to creep under
+    // and, past the gap, a Needle-Crawler clinging to what the world calls its floor, stabbing up at you
+    L.monsters.push({ kind: 'crawler', id: 'hc', room: 'hall', x: 30, y: 6.4, floor: 1, x0: 25.6, x1: 33.6, zone: { x0: 24.6, x1: 34.6, y0: 0.5, y1: 6.4 } });
+    hint(31, 40, 'sneak');
     solid(52, -30, 60, 6, { ground: true });
     solid(60, -30, 62, 4.5, { ground: true }); solid(62, -30, 64, 3, { ground: true }); solid(64, -30, 66, 1.5, { ground: true });
     ground(66, 72, 0);

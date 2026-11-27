@@ -555,6 +555,7 @@
       const f = R.rot ? 2 * r.cx - B.x : B.x;
       if (Math.abs(f - fx) < 0.25 && !o.until) break;
       if (o.until && Math.abs(f - fx) < 0.45) { release('KeyD'); release('KeyA'); yield; continue; }
+      if (o.stop && R.inside && B.ground && o.stop(f)) { release('KeyD'); release('KeyA'); if (o.sneak && o.sneak(f)) hold('KeyS'); yield; continue; }
       const fdir = Math.sign(fx - f);
       const wdir = R.inside ? fdir : Math.sign((R.rot ? 2 * r.cx - fx : fx) - B.x);
       hold(wdir > 0 ? 'KeyD' : 'KeyA'); release(wdir > 0 ? 'KeyA' : 'KeyD');
@@ -566,7 +567,8 @@
   }
   S['upturned:0'] = function* () {
     yield* walkTo(23.4, { wait: false });
-    yield* roomWalk('hall', 23.2, { sneak: (f) => f > 42.4 && f < 45.6, hop: (d, f) => d < 0 && f - 38 > 0.35 && f - 38 < 0.75 });
+    const hc = () => G.mon.find((m) => m.id === 'hc');
+    yield* roomWalk('hall', 23.2, { sneak: (f) => (f > 42.4 && f < 45.6) || f < 35.4, hop: (d, f) => d < 0 && f - 38 > 0.35 && f - 38 < 0.75, stop: (f) => f < 35.6 && f > 24.4 && Math.abs(hc().x - f) < 3 });
     yield* walkTo(L().cps[1].x + 0.6 - role() * 0.8);
   };
   S['upturned:1'] = function* () {

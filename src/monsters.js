@@ -30,7 +30,7 @@ const R2D = 180 / Math.PI;
 export function newMonster(m) {
   if (KINDS[m.kind]) return KINDS[m.kind].make(m);
   return m.kind === 'crawler'
-    ? { kind: 'crawler', id: m.id, x: m.x, x0: m.x0, x1: m.x1, y: m.y, mode: 'roam', dir: 1, tx: m.x, t: 0, home: m.x, zone: m.zone }
+    ? { kind: 'crawler', id: m.id, x: m.x, x0: m.x0, x1: m.x1, y: m.y, mode: 'roam', dir: 1, tx: m.x, t: 0, home: m.x, zone: m.zone, room: m.room, floor: m.floor }
     : { kind: 'collector', id: m.id, x: m.x, x0: m.x0, x1: m.x1, y: m.y, mode: 'pace', dir: -1, tx: m.x, t: 0, home: m.x, heard: 0, who: -1 };
 }
 

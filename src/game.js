@@ -111,6 +111,7 @@ export class Game {
     this.host = { slabT: {}, bellT: {}, respawnAt: 0, ringT: 0, snapT: 0, beats: L.shears.map(() => null), wormed: {}, exitT: 0, latched: {}, push: {}, rot: {}, grub: {}, endT: 0, splitT: 0 };
     this.mon = L.monsters.map(newMonster);
     this.monViews = L.monsters.map((m) => viewFor(app, m));
+    L.monsters.forEach((m, i) => { const v = this.monViews[i], piv = m.room && this.scene.rooms && this.scene.rooms[m.room]; if (piv && v.root) { const r = L.rooms.find((q) => q.id === m.room); v.root.reparent(piv); v.root.setLocalPosition(-r.cx, -r.cy, 0); } });
     if (tripped) for (const m of this.mon) if (m.kind === 'collector') m.mode = 'down';
     cp = this.W.cp;
     this.beats = L.shears.map(() => null);
@@ -144,6 +145,8 @@ export class Game {
     this.watchers = [];
     this.wormT = 0;
     this.sfx.drone(0); this.sfx.duck(1); this.hud.dread?.(0, 0, 60);
+    for (const v of this.monViews || []) v.destroy(); // (before the scene: some live in its rooms)
+    this.monViews = [];
     this.scene?.destroy(); this.scene = null;
     this.threads?.destroy(); this.threads = null;
     this.spoolView?.destroy(); this.spoolView = null;
@@ -153,8 +156,7 @@ export class Game {
     for (const c of this.caged || []) c.r.destroy(); this.caged = [];
     if (this.cold) { this.cold.rig.destroy(); this.cold.hand.destroy(); this.cold = null; }
     for (const s of this.strings || []) s?.destroy(); this.strings = [];
-    for (const v of this.monViews || []) v.destroy();
-    this.monViews = [];
+
     this.fx.clear();
     this.hud.hint(null); this.hud.use(null); this.hud.tags([]);
   }
@@ -394,7 +396,7 @@ export class Game {
     });
     // the hunters
     this.mon.forEach((m, mi) => {
-      for (const e of thinkMonster(m, dt, bodies, L, { meat: L.meat.map((q, k) => ({ x: q.x, state: W.meat[k] || 0, poison: q.poison })), T })) {
+      for (const e of thinkMonster(m, dt, m.room ? this.framed(bodies, m.room, T) : bodies, L, { meat: L.meat.map((q, k) => ({ x: q.x, state: W.meat[k] || 0, poison: q.poison })), T })) {
         if (e.t === 'stab') this.emit({ t: 'stab', x: e.x, mi });
         else if (e.t === 'grab') { if (e.i >= 0) { const p = this.players[e.i]; this.kill(e.i, 'caged', p.b.x, p.b.y, mi); } }
         else if (e.t === 'trip') this.emit({ t: 'trip', mi, x: e.x });
@@ -462,7 +464,13 @@ export class Game {
       case 'crack': W.slabs[e.k] = 1; sfx.play('crackle', { x: L.slabs[e.k].x0 + 1.3 }); break;
       case 'shatter': { W.slabs[e.k] = 2; const s = L.slabs[e.k]; sfx.play('glass', { x: s.x0 + 1.3 }); for (let x = s.x0 + 0.3; x < s.x1; x += 0.6) fx.burst('glass', x, s.y - 0.1, 0, 5, { spread: 0.7 }); break; }
       case 'bell': { this.cap('[a bell rings]', L.bells[e.k].x); this.bellAt[e.k] = this.T(); const b = L.bells[e.k]; sfx.play(b.kind === 'hang' ? 'bell' : 'tinybell', { x: b.x }); W.wake = Math.max(W.wake, 0.6); break; }
-      case 'stab': { const m = this.mon[e.mi]; sfx.play('stab', { x: e.x }); fx.shake(0.4); fx.burst('dust', e.x, m.y - 4.1, 0.3, 8, { spread: 1 }); const b = this.me?.b; if (b && !b.dead && !this.dying && W.phase === 'play' && Math.abs(b.x - e.x) < 0.8 && b.y < m.y - 1 && b.y > m.y - 5.2) this.die('crawler'); break; }
+      case 'stab': {
+        const m = this.mon[e.mi], b = this.me?.b;
+        sfx.play('stab', { x: e.x }); fx.shake(0.4);
+        if (!m.room) fx.burst('dust', e.x, m.y - 4.1, 0.3, 8, { spread: 1 });
+        if (b && !b.dead && !this.dying && W.phase === 'play') { const [bx2, by] = m.room ? (() => { const r = L.rooms.find((q) => q.id === m.room), st = roomState(r, this.T(), W.turnAt[m.room]); return flip(r, st.rot, b.x, b.y); })() : [b.x, b.y]; if (Math.abs(bx2 - e.x) < 0.8 && by < m.y - 1 && by > m.y - 5.6) this.die('crawler'); }
+        break;
+      }
       case 'hear': { // it heard you: the scare
         { const m = this.mon[e.mi]; this.cap(m.kind === 'crawler' ? '[skittering, above]' : m.kind === 'collector' ? '[a great groan]' : m.kind === 'drinker' ? '[a hum, rising]' : m.kind === 'glutton' ? '[the boards shift]' : '[something hears you]', m.x); }
         const m = this.mon[e.mi];
@@ -837,6 +845,11 @@ export class Game {
   inTurningRoom(b) { const r = b.hold ? this.L.rooms.find((q) => q.id === b.holdRoom) : roomAt(this.L, b.x, b.y); if (!r || !(r.period || r.lever)) return false; const st = roomState(r, this.T(), this.W.turnAt[r.id]); return st.warn != null || st.turning; }
   /** how a room stands now (for the playtests) */
   roomInfo(id) { const r = this.L.rooms.find((q) => q.id === id); return r ? { ...roomState(r, this.T(), this.W.turnAt[id]), r, inside: roomAt(this.L, this.me.b.x, this.me.b.y) === r || (!!this.me.b.hold && this.me.b.holdRoom === id) } : null; }
+  /** bodies as a room sees them, in its own frame */
+  framed(bodies, id, T) {
+    const r = this.L.rooms.find((q) => q.id === id), st = roomState(r, T, this.W.turnAt[id]);
+    return st.rot ? bodies.map((b) => ({ ...b, x: 2 * r.cx - b.x, y: 2 * r.cy - b.y, vx: -(b.vx || 0) })) : bodies;
+  }
   /** a step inside a room: in its frame (where down is its floor); through a turn, held or flung */
   stepInRoom(rm, b, inp, dt, links, T) {
     const st = roomState(rm, T, this.W.turnAt[rm.id]);
@@ -1166,7 +1179,7 @@ export class Game {
         v.update(dt, m, T, vic);
         // the hum: rising as it comes, a whine when it hunts
         if (live && m.kind === 'drinker' && m.mode !== 'dead' && m.mode !== 'perch' && Math.abs(m.x - this.cam.x) < 16 && ((v.humT = (v.humT || 0) - dt) <= 0)) { v.humT = 0.38; sfx.play('hum', { x: m.x, f: m.mode === 'hunt' ? 235 : m.mode === 'drink' ? 150 : 190, vol: m.mode === 'hunt' ? 1.1 : 0.6 }); }
-      } else if (m.kind === 'crawler') { v.update(dt, m, T, m.y - 4.2); if (live && m.mode === 'hunt' && (this.skitT = (this.skitT || 0) - dt) <= 0) { this.skitT = 0.22; sfx.play('skitter', { x: m.x, vol: 0.8 }); } }
+      } else if (m.kind === 'crawler') { v.update(dt, m, T, m.floor ?? m.y - 4.2); if (live && m.mode === 'hunt' && (this.skitT = (this.skitT || 0) - dt) <= 0) { this.skitT = 0.22; sfx.play('skitter', { x: m.x, vol: 0.8 }); } }
       else { const c = this.caught >= 0 ? this.players[this.caught] : null; v.update(dt, m, T, c && m.mode === 'grab' ? { x: c.b.x, y: c.b.y } : null); const st = v.takeStomp(); if (st !== undefined && live && m.mode !== 'down') { sfx.play('stomp', { x: st, vol: 1 }); if (Math.abs(st - this.cam.x) < 16) fx.shake(0.22); fx.burst('dust', st, m.y + 0.1, 0.5, 4, { spread: 1, power: 0.6 }); } }
     });
     // ---- worms announce themselves
@@ -1266,6 +1279,7 @@ export class Game {
         const dx = Math.abs(m.x - b.x);
         if (m.kind === 'crawler') {
           const Z = m.zone || L.monsters.find((q) => q.id === m.id).zone;
+          if (m.room) continue; // (the one in the hung hall keeps its own counsel)
           if (b.x > Z.x0 - 4 && b.x < Z.x1 + 2) d = Math.max(d, 0.35 + 0.3 * Math.max(0, 1 - dx / 9) + (m.mode === 'roam' ? 0 : 0.45));
         } else if (m.kind === 'glutton') { if (m.mode !== 'dead' && b.x > m.x0 - 3 && b.x < m.x1 + 3) d = Math.max(d, 0.3 + 0.35 * Math.max(0, 1 - dx / 10) + (m.mode === 'hunt' || m.mode === 'rise' ? 0.4 : 0)); } else if (m.kind === 'drinker') { if (m.mode !== 'dead' && dx < 12) d = Math.max(d, 0.25 + 0.35 * (1 - dx / 12) + (m.mode === 'hunt' || m.mode === 'drink' ? 0.4 : 0)); } else if (m.mode !== 'down' && dx < 18) d = Math.max(d, 0.25 + 0.4 * (1 - dx / 18) + (m.mode === 'hunt' || m.mode === 'grab' ? 0.4 : 0));
       }
