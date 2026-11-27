@@ -263,7 +263,7 @@ async function boot() {
   }
   // ---- journeys: every lantern saves to the journey being played (alone, or as host or guest)
   saves.useStorage(portal.portalStorage?.());
-  game.onSave = (s) => { if (net.online && !net.isHost) { saves.write('g', s); return; } let slot = saves.current(); if (slot < 0) { slot = saves.freeSlot(); saves.setCurrent(slot); } saves.write(slot, s); refreshMenu(); };
+  game.onSave = (s) => { if (game.daily) return; if (net.online && !net.isHost) { saves.write('g', s); return; } let slot = saves.current(); if (slot < 0) { slot = saves.freeSlot(); saves.setCurrent(slot); } saves.write(slot, s); refreshMenu(); };
   game.goreMode = store.get('tb.gore', portal.ON_CRAZY ? 'stitched' : 'full');
   function refreshMenu() {
     const s = saves.read(saves.current());
@@ -280,6 +280,7 @@ async function boot() {
     if (fresh && !from) { const slot = saves.freeSlot(); saves.erase(slot); saves.setCurrent(slot); }
     const ci = from ? from.ci ?? 0 : 0;
     game.thread = from?.thread ?? saves.read(saves.current())?.thread ?? 1;
+    game.daily = false; game.oneThread = !!(from?.one ?? saves.read(saves.current())?.one);
     game.seed = from?.seed ?? (fresh || !from ? (Math.random() * 1e9) | 0 : game.seed);
     if (from || fresh || !game.running || !game.attract || game.n !== 1 || game.ci !== 0) game.start({ order: soloOrder(), meId: 'me', runT0: 0, chapter: ci, cp: from?.lantern ?? 0, deaths: from?.deaths ?? 0, cut: from?.cuts ?? 0, found: from?.found ?? [] }); else game.begin();
     game.timeBefore = from?.time ?? 0;
@@ -317,6 +318,35 @@ async function boot() {
       ch.appendChild(li);
     });
   }
+  // ---- the Daily Thread: one chapter, today's own small differences, one life; a board of times
+  const today = Math.floor(Date.now() / 86400000);
+  const dailyCi = 1 + (today % (CHAPTERS.length - 2)); // (never the first chapter, never the end)
+  $('mDailyS').textContent = CHAPTERS[dailyCi].name.toLowerCase();
+  $('mDaily').addEventListener('click', () => {
+    sfx.init(); sfx.play('select');
+    game.oneThread = true; game.daily = true; game.seed = today * 31 + 7; game.thread = 1;
+    game.start({ seed: game.seed, order: soloOrder(), meId: 'me', runT0: 0, chapter: dailyCi });
+    game.runT0 = game.T();
+    setState('play');
+  });
+  hud.dailyDone = async (r) => {
+    let top = [];
+    try {
+      const base = serverUrl ? Net.httpBase(serverUrl) : '';
+      const res = await fetch(`${base}/daily`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: myName(), time: r.time, deaths: r.deaths, n: r.n }) });
+      top = (await res.json()).top || [];
+    } catch { /* no server: only your own time */ }
+    const best = +store.get(`tb.daily.${today}`, '0');
+    if (!best || r.time < best) store.set(`tb.daily.${today}`, String(r.time.toFixed(1)));
+    $('dName').textContent = r.name;
+    const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}.${Math.floor((t % 1) * 10)}`;
+    $('dYou').textContent = `you: ${fmt(r.time)}  ·  ${r.deaths ? `${r.deaths} falls` : 'no falls'}`;
+    const ol = $('dTop'); ol.innerHTML = '';
+    top.forEach((e, i) => { const li = document.createElement('li'); const w = document.createElement('div'); w.className = 'what'; const b = document.createElement('b'); b.textContent = `${i + 1}.  ${hud.streamer ? '·····' : e.name}`; const sm = document.createElement('small'); sm.textContent = `${fmt(e.time)}  ·  ${e.deaths ? `${e.deaths} falls` : 'no falls'}`; w.append(b, sm); li.appendChild(w); ol.appendChild(li); });
+    show('dailyEnd', true);
+  };
+  $('dBack').addEventListener('click', () => { sfx.play('click'); show('dailyEnd', false); game.daily = false; game.oneThread = false; toMenu(); });
+  $('jOne').addEventListener('click', () => { sfx.play('select'); show('journeys', false); const slot = saves.freeSlot(); saves.erase(slot); saves.setCurrent(slot); saves.write(slot, { ci: 0, one: true }); game.oneThread = true; firstStory(() => playSolo(false, { ci: 0, one: true })); });
   $('mJourneys').addEventListener('click', () => { sfx.init(); sfx.play('click'); renderJourneys(); show('journeys', true); });
   $('jBack').addEventListener('click', () => { sfx.play('click'); show('journeys', false); });
   // ---- the story: told once, before the first journey (and again from i)

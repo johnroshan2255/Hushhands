@@ -348,7 +348,7 @@ export class Game {
       if (ps.every(([, i]) => W.plates[i]) && ls.every(([, i]) => W.levers[i])) { W.open[id] = true; this.emit({ t: 'gate', id }); }
     }
     // the next lantern
-    const next = L.cps[W.cp + 1];
+    const next = this.oneThread ? null : L.cps[W.cp + 1]; // (One Thread: no lanterns inside a chapter)
     if (next && bodies.some((b) => b.real && !b.dead && b.x >= next.x - 0.6 && Math.abs(b.y - next.y) < 3)) { W.cp++; this.emit({ t: 'cp', k: W.cp }); }
     // the water comes in once someone is well inside
     for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && (w.anyY || b.y < w.floor + 7))) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); if (w.lock) { W.open[w.lock] = false; this.emit({ t: 'shut', id: w.lock }); } }
@@ -507,6 +507,7 @@ export class Game {
   /** everyone walked through the arch: the card between chapters, then the next chapter, built for us */
   onChapter(e) {
     if (this.leaving) return;
+    if (this.daily) { this.leaving = true; this.W.phase = 'leaving'; this.sfx.play('win'); this.hud.dailyDone?.({ time: this.T() - (this.runT0 ?? 0), deaths: this.W.deaths, n: this.n, name: this.L.name }); return; }
     this.leaving = true;
     this.W.phase = 'leaving';
     const next = e.ci, C = CHAPTERS[next];

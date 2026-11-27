@@ -113,6 +113,7 @@ function serveStatic(req, res) {
   const url = decodeURIComponent((req.url || '/').split('?')[0]);
   if (url === '/health') { res.writeHead(200, { 'content-type': 'text/plain' }); res.end('ok'); return; }
   if (url === '/rooms') { listRooms(res); return; }
+  if (url === '/daily') { daily(req, res); return; }
   let file = path.join(ROOT, url === '/' ? 'index.html' : url);
   if (!file.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
   if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(ROOT, 'index.html');
@@ -143,6 +144,28 @@ function serveStatic(req, res) {
   res.writeHead(200, { ...headers, 'content-length': st.size });
   if (req.method === 'HEAD') { res.end(); return; }
   fs.createReadStream(file).pipe(res);
+}
+// the Daily Thread: today's best times (kept in memory, and in a small file beside the server)
+const DAILY = path.join(path.dirname(fileURLToPath(import.meta.url)), 'daily.json');
+let board = {};
+try { board = JSON.parse(fs.readFileSync(DAILY, 'utf8')); } catch { board = {}; }
+function daily(req, res) {
+  const day = String(Math.floor(Date.now() / 86400000));
+  const send = () => { res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify({ day, top: (board[day] || []).slice(0, 10) })); };
+  if (req.method !== 'POST') { send(); return; }
+  let body = '';
+  req.on('data', (c) => { body += c; if (body.length > 2000) req.destroy(); });
+  req.on('end', () => {
+    try {
+      const m = JSON.parse(body), time = Math.max(5, Math.min(36000, +m.time || 0)), deaths = Math.max(0, Math.min(999, m.deaths | 0)), name = clean(m.name) || 'Wanderer', n = Math.max(1, Math.min(4, m.n | 0));
+      const list = (board[day] = board[day] || []);
+      list.push({ name, time: Math.round(time * 10) / 10, deaths, n });
+      list.sort((a, b) => a.time - b.time); list.length = Math.min(list.length, 50);
+      for (const k of Object.keys(board)) if (+k < +day - 3) delete board[k];
+      fs.writeFile(DAILY, JSON.stringify(board), () => {});
+    } catch { /* a bad post: ignored */ }
+    send();
+  });
 }
 async function listRooms(res) {
   let rooms = [];

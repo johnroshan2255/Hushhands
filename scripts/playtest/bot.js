@@ -339,10 +339,10 @@
     say(`the crate at ${crate().x.toFixed(1)}`);
     // onto it, then up to the ledge
     const top = L().cps[1].y - 0.1;
-    for (let k = 0; k < 8 && !(b().ground && b().y > top); k++) {
+    for (let k = 0; k < 16 && !(b().ground && b().y > top); k++) {
       const onCrate = b().ground && !b().swim && b().y < top - 0.5 && b().x > 44;
       if (!onCrate) { yield* swimTo(crate().x - crate().w / 2 - 0.3, null); hold('KeyD'); hold('Space'); yield* frames(30); release('KeyD'); release('Space'); continue; }
-      yield* walkTo(crate().x + 0.35, { wait: false, tol: 0.1 });
+      yield* walkTo(crate().x + 0.35 - (k % 3) * 0.25, { wait: false, tol: 0.1 });
       hold('KeyD'); hold('Space'); yield* frames(16); release('Space'); yield* frames(30); release('KeyD');
     }
     if (!(b().y > top)) throw new Error('never got up off the crate');

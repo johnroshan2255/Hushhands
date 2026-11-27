@@ -64,13 +64,23 @@ mode, clips (C: the last ~20 s as a .webm, on stronger machines), what took you 
 ## What was checked
 
 Headless Chrome on Windows, against the built game, with the code-player pressing real keys:
-- Every new chapter on its own, alone, start to exit: the Mill, the Fen, the Granary, the Dye-Works,
-  the Larder, the Theatre, the Upturned Loom, the Moth Tower (to the Wind ending).
-- The whole journey alone after the chapters were split (the eight original chapters): 0 deaths.
+- **The whole journey alone, all fifteen chapters, in one run: 0 deaths**, 10 min 22 s of bot time,
+  8 of the 12 buttons picked up on the way, end screen *The Whole Doll*.
+- **Two players through every new chapter** (from the Mill to the end, in stretches): passes, after
+  fixes found this way (stale positions from the chapter before, levers further apart than the
+  thread, the Granary's lamp lost after a death). The last stretch, the Upturned Loom to the Wind
+  ending: 0 deaths, *Unbroken*.
+- **Slow machines** (`scripts/playtest/perf.mjs`, Chrome's CPU throttling, the bot playing each
+  chapter's busiest stretch, 800×400): with the CPU 4× slower, every chapter holds 144 fps at the
+  lowest quality; 12× slower, 21–44 fps (the Fen and the Dye-Works lowest).
+- **Every screen shape** (`views.mjs`, nine: phones both ways, a small old phone, tablets, desktop,
+  square, ultrawide): title, together panel, play and the settings panel all fit.
 - Two and four players through the eight original chapters: pass (2: 2 deaths at the shears/bells;
   4: 9 deaths, mostly the shears).
-- Two players through the Mill: passes when the two bots' timing lines up; they sometimes drag
-  each other off the crate (a bot problem, not the level's).
+- A single unbroken two-player run from chapter 1 has not finished yet: the two bots sometimes stall
+  at the Mill's crate (one fails to get from the crate to the ledge) or in the Fen (both wait for a
+  Drinker to notice them). Both are the test bots' coordination; every chapter has been passed by
+  two players in stretches.
 - Restitch between two browsers: one down, the other stitches, play goes on.
 - Voice between two browsers (fake microphone): peers connect, volume follows distance.
 - Each new creature and place was looked at in screenshots (see the session notes).
@@ -80,16 +90,19 @@ Headless Chrome on Windows, against the built game, with the code-player pressin
 - **Nobody has played the new chapters by hand.** The difficulty is a guess: the bot gets through
   most of them first time, which probably means they are too easy for the bot and about right for a
   person, but that is only a guess. Section 16 asks for a hand-play of each with sound.
-- **The new chapters with 2–4 players** have not been run by the bots (only the Mill, at 2). The
+- **The new chapters with 3 and 4 players** have not been run by the bots (2 players have). The
   rules scale (more Drinkers, more moths, valves and levers per player, lamps for 3–4), but untried.
 - Not built from section 11: the waterwheel and leeches (5), riding a fed Drinker (7), the grain
   chute (8), the scale and the collapsing floor (10), the Puppeteer lifting a doll on its strings
-  (11), weightless moth-dust, the hanging lake, rats down the walls and the upside-down crawler (12).
-- The Other Dolls caged at the Collector's (mystery 1's answer) are still plain cages.
-- Section 12's remakes: the doll, the Collector and the Needle-Crawler are still built in code.
-- The director, death replays, *Second Thread*, *One Thread*, the Daily Thread, leaderboards,
-  cosmetics, Twitch votes, photo mode (section 10, later).
-- Low-end devices (section 15): no throttled-CPU runs yet, no real phone or old laptop; portrait
-  layouts of the new HUD pieces (breath ring, rot ring, the cold bar, captions) unchecked.
+  (11), the hanging lake, rats down the walls and the upside-down crawler (12). (Moth-dust is built.)
+- Section 12's remakes: the Collector and the Needle-Crawler now wear Blender bodies (their limbs
+  stay procedural); the doll itself is still built in code.
+- A small director is built (each journey's seed changes which traps are sunk and which worms are
+  silent; everyone in a room builds from the host's). *Second Thread* is built simply (no Other Doll
+  ahead of you any more). *One Thread* (no lanterns inside a chapter) is a kind of journey; **the Daily Thread** is one
+  chapter a day with that day's seed and one life, and a board of times kept by the server
+  (`/daily`, in memory and `server/daily.json`). Not built: death replays, cosmetics, Twitch votes,
+  photo mode.
+- Low-end devices (section 15): no real phone or old laptop yet (only Chrome's throttling).
 - Voice behind strict networks needs a TURN server (only STUN now).
 - Clips are video only (no sound).

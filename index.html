@@ -55,6 +55,7 @@
       <button class="btn primary" id="mContinue" hidden>CONTINUE <small id="mContinueS"></small></button>
       <button class="btn" id="mSolo">SET OUT ALONE</button>
       <button class="btn" id="mTogether">SET OUT TOGETHER <small>2 – 4</small></button>
+      <button class="btn ghost" id="mDaily">THE DAILY THREAD <small id="mDailyS"></small></button>
       <button class="btn ghost" id="mJourneys">JOURNEYS &amp; CHAPTERS</button>
       <button class="btn ghost" id="mSettings">SETTINGS</button>
     </nav>
@@ -87,10 +88,22 @@
       <h2>JOURNEYS</h2>
       <p class="sub">The Loom remembers where each journey last woke. It saves at every lantern.</p>
       <ol id="jSlots" class="slots"></ol>
+      <div class="row"><button class="btn small" id="jOne">NEW JOURNEY: ONE THREAD</button><small class="sub">no lanterns inside a chapter: one death, and the chapter starts again</small></div>
       <h3>CHAPTERS</h3>
       <p class="sub">Start again from any chapter you have reached, alone. (Together, the one who leads picks it in the thread.)</p>
       <ol id="jChapters" class="chapters"></ol>
       <div class="row"><button class="btn ghost" id="jBack">BACK</button></div>
+    </div>
+  </section>
+
+  <!-- ============ the daily thread's end ============ -->
+  <section id="dailyEnd" class="overlay" hidden>
+    <div class="panel">
+      <h2>THE DAILY THREAD</h2>
+      <p class="sub" id="dName"></p>
+      <p class="stats" id="dYou"></p>
+      <ol id="dTop" class="slots"></ol>
+      <div class="row"><button class="btn primary" id="dBack">BACK</button></div>
     </div>
   </section>
 
@@ -147,6 +160,15 @@
         <li><b>The bells</b> wake the Choir above. Creep under the hanging ones, jump the wires.</li>
         <li><b>The shears</b> cut anything between their blades, the thread too. Go through together.</li>
         <li><b>The Collector</b> hears every step, and its hands lift anything loose, even creeping. Only one who holds fast is too heavy. Stretch the thread across its path and hold fast: it will trip, and only then does its yard open.</li>
+        <li><b>Deep water</b> takes your breath. Hold JUMP to swim up. <b>Eels</b> light up before they strike, and a wet thread carries the shock to everyone tied.</li>
+        <li><b>The Drinkers</b> hunt light, and your thread is light. Creep through mud to smother it; lead them through a flame.</li>
+        <li><b>The rats</b> are wherever the floor is dark. A lamp makes a circle they will not cross. You cannot jump with one: toss it.</li>
+        <li><b>The rot</b> comes from the pale blooms, and goes down the thread into the others. Clean water washes it off.</li>
+        <li><b>The Glutton</b> lives under the boards and feels every step. Hide in a sack, keep still. It eats whatever falls.</li>
+        <li><b>The Puppeteer</b> drops grubs on whoever its light finds: left becomes right. A flame burns a grub off.</li>
+        <li><b>The drums</b> turn their halls over. Hold fast as they turn, or fall their whole height.</li>
+        <li><b>Moths</b> eat cloth, and you are cloth. Burn them off at a flame. Something larger is under them.</li>
+        <li><b>Together</b>, a death is not the end at once: reach the body and hold USE to stitch your friend back.</li>
         <li><b>Some things do not show themselves</b> until it is too late. Watch the ground. Listen.</li>
       </ul>
       <div class="row"><button class="btn primary" id="iClose">BACK</button><button class="btn" id="iTrial">PLAY THE TRIAL</button><button class="btn ghost" id="iStory">THE STORY AGAIN</button></div>
