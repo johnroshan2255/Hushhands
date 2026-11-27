@@ -257,6 +257,7 @@ async function boot() {
     show('touch', s === 'play' && touchUI);
     document.body.classList.toggle('touching', touchUI);
     show('roomChip', s === 'play' && net.online && !hud.streamer);
+    document.body.classList.toggle('inroom', s === 'play' && net.online && !hud.streamer); // (the words along the top keep clear of the room's code)
     if (net.online) $('roomChip').textContent = net.code;
     input.enabled = s === 'play';
     sfx.music(s === 'play' || s === 'end' ? 'play' : 'menu');
@@ -453,6 +454,11 @@ async function boot() {
   $('sSfx').addEventListener('input', (e) => sfx.setVolume('sfx', e.target.value / 100));
   $('sMusic').addEventListener('input', (e) => sfx.setVolume('music', e.target.value / 100));
   $('sBright').addEventListener('input', (e) => { hud.expo = e.target.value / 100; store.set('tb.bright', e.target.value); });
+  // hints: the how-to words (the hint, the trial's card) can be switched off; warnings stay
+  let hintsOn = store.get('tb.hints', '') !== 'off';
+  const hintsUI = () => { $('sHints').textContent = hintsOn ? 'ON' : 'OFF'; document.body.classList.toggle('nohints', !hintsOn); };
+  hintsUI();
+  $('sHints').addEventListener('click', () => { sfx.play('click'); hintsOn = !hintsOn; store.set('tb.hints', hintsOn ? '' : 'off'); hintsUI(); });
   let capOn = store.get('tb.cap', '') === '1';
   const capUI = () => { $('sCap').textContent = capOn ? 'ON' : 'OFF'; };
   capUI();

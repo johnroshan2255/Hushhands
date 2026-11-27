@@ -66,6 +66,8 @@ LOW on phones and weak machines): sharpness changes at once, lights and smooth e
 **Full screen** from a button in the top right corner (title and play alike; pause and *i* sit beside
 it): kept, and taken up again at the first tap after the game opens (an iPhone's browser has none for
 a page: tapped there, the button says to add the game to the home screen).
+On touch the trial's card and the hint go along the top (the card used to lie on the ground in front
+of you, over the Meadow's traps); **Hints** in the settings switches them off (warnings stay).
 
 ## What was checked
 

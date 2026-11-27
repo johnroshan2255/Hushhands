@@ -74,6 +74,7 @@ node scripts/playtest/worm.mjs                          # the worm in the head, 
 node scripts/playtest/photo.mjs                         # photo mode (O), alone and together
 node scripts/playtest/graphics.mjs                      # the GRAPHICS setting, on a phone
 node scripts/playtest/fullscreen.mjs                    # the full-screen button (top right corner)
+node scripts/playtest/texts.mjs                         # the words on a touch screen: clear of the ground and the controls
 ```
 
 `TB_SHOW=1` plays in a Chrome window you can watch, with sound. The playtests play as a returning

@@ -135,7 +135,27 @@ input[type=range]::-moz-range-thumb { width: 1.15rem; height: 1.15rem; border: 0
 .tb.brace { right: calc(7.6rem + var(--safe-r)); bottom: calc(1.2rem + var(--safe-b)); width: 4.6rem; height: 4.6rem; }
 .tb.use { right: calc(2.1rem + var(--safe-r)); bottom: calc(7.9rem + var(--safe-b)); width: 4.4rem; height: 4.4rem; border-color: var(--amber); color: var(--amber); }
 .tb.ping { right: calc(8.4rem + var(--safe-r)); bottom: calc(7.2rem + var(--safe-b)); width: 2.6rem; height: 2.6rem; font-size: 1rem; opacity: 0.8; }
-body.touching #hint { bottom: auto; top: calc(0.8rem + var(--safe-t)); max-width: min(30rem, 66vw); font-size: 0.86rem; }
+/* ---------- the words that help (the trial's card, the hint) ----------
+   With keys: the hint along the bottom, the trial's card at the top. On touch the bottom is the ground
+   you are reading and the controls, so both go along the top, in one row between the corner buttons;
+   on a narrow screen (a phone held upright, a small one) in a row of their own under the buttons. */
+#tips { display: contents; }
+body.touching #tips { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: center; gap: 0.45rem 0.6rem; position: absolute; top: calc(0.7rem + var(--safe-t)); left: calc(8rem + var(--safe-l)); right: calc(8rem + var(--safe-r)); pointer-events: none; }
+body.touching.hasfull #tips { left: calc(10.9rem + var(--safe-l)); right: calc(10.9rem + var(--safe-r)); }
+body.touching.inroom #tips { left: calc(11.6rem + var(--safe-l)); right: calc(11.6rem + var(--safe-r)); }
+body.touching.inroom.hasfull #tips { left: calc(14.6rem + var(--safe-l)); right: calc(14.6rem + var(--safe-r)); }
+body.touching #hint { position: static; margin: 0; flex: 0 1 auto; min-width: 0; max-width: 30rem; font-size: 0.86rem; padding: 0.5rem 0.9rem; }
+body.touching #trial { position: static; transform: none; flex: 0 1 auto; max-width: 13rem; align-items: flex-start; text-align: left; padding: 0.4rem 0.8rem 0.45rem; }
+body.touching #trial b { font-size: 1.05rem; }
+body.touching #trial span { font-size: 0.76rem; line-height: 1.3; }
+@media (max-width: 640px) {
+  body.touching #tips, body.touching.hasfull #tips, body.touching.inroom #tips, body.touching.inroom.hasfull #tips { top: calc(3.9rem + var(--safe-t)); left: calc(0.8rem + var(--safe-l)); right: calc(0.8rem + var(--safe-r)); }
+  body.touching #trial { max-width: 100%; }
+}
+/* hints switched off: the how-to words go; a warning (a worm in your head) still shows */
+body.nohints #trial, body.nohints #hint:not(.urgent) { display: none !important; }
+/* a phone on its side is short: captions at the bottom left would lie on the ground and the stick */
+@media (max-height: 520px) { body.touching #captions { bottom: auto; top: 30%; } }
 
 /* ---------- loading ---------- */
 #boot { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 55%, #b3bcb9 0%, #7f8a87 45%, #2a302f 100%); transition: opacity 0.9s ease; }
@@ -195,7 +215,6 @@ body.photo #bFull, body.photo #fullNote { display: none !important; }
 #trial b { font-family: var(--serif); font-weight: 500; font-size: 1.25rem; letter-spacing: 0.08em; }
 #trial span { font-size: 0.84rem; color: var(--fog2); }
 #trial.done b { color: var(--amber); }
-body.touching #trial { top: auto; bottom: calc(5.5rem + var(--safe-b)); }
 
 /* ---- journeys and chapters */
 .slots, .chapters { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.45rem; }
