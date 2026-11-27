@@ -61,7 +61,8 @@ reach the body and hold USE; the downed can twitch to show where they are), ping
 **Reach**: captions for the sounds that matter, achievements (eleven), phone vibration, streamer
 mode, clips (C: the last ~20 s as a .webm, on stronger machines), **photo mode** (O: the moment held
 still when alone, the screen bare, the camera free with the arrows and + / −, ENTER keeps a .png),
-what took you on the end screen.
+what took you on the end screen. **Graphics** in the settings panel (AUTO, LOW, MEDIUM, HIGH; AUTO is
+LOW on phones and weak machines): sharpness changes at once, lights and smooth edges at the title.
 
 ## What was checked
 

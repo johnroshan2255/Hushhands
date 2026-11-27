@@ -153,7 +153,8 @@ async function boot() {
   const level = qual === 'auto' ? (weak ? 0 : 2) : +qual;
   setLightCount(level === 0 ? 8 : level === 1 ? 12 : 16);
   stage('lighting the lantern', 0.25);
-  const app = await createApp($('app'), { antialias: level >= 1, dpr: level === 0 ? 1.25 : level === 1 ? 1.5 : 2 });
+  const DPR = [1.25, 1.5, 2]; // how sharp the picture may be, by level
+  const app = await createApp($('app'), { antialias: level >= 1, dpr: DPR[level] ?? 2 });
   const device = app.graphicsDevice;
   const R = new Renderer(app);
   const sfx = new Sfx();
@@ -435,10 +436,15 @@ async function boot() {
     $('pResume').textContent = playing ? 'GO ON' : 'BACK';
     $('pKeys').innerHTML = touchUI ? '' : '<b>A D / ← →</b><span>walk, swing on the thread</span><b>SPACE</b><span>jump, let go of the thread</span><b>W S / ↑ ↓</b><span>climb the thread; S creeps on the ground</span><b>SHIFT</b><span>brace: hold the thread fast</span><b>E</b><span>levers; your spool, when alone</span>';
     $('pKeys').hidden = touchUI;
+    gfxUI();
     show('pause', true);
     if (playing) { game.paused = true; input.enabled = false; portal.setPlaying(false); }
   };
-  const closePause = () => { show('pause', false); if (state === 'play') { game.paused = false; input.enabled = true; portal.setPlaying(true); } };
+  const closePause = () => {
+    show('pause', false);
+    if (state === 'play') { game.paused = false; input.enabled = true; portal.setPlaying(true); }
+    else if (state === 'menu' && !net.online && gfxLevel(gfx) !== level) location.reload(); // new graphics, at the title: open the game again with them
+  };
   $('mSettings').addEventListener('click', () => { sfx.play('click'); openPause('SETTINGS'); });
   $('bPause').addEventListener('click', () => { sfx.play('click'); openPause('PAUSED'); });
   $('pResume').addEventListener('click', () => { sfx.play('click'); closePause(); });
@@ -502,6 +508,26 @@ async function boot() {
   }
   addEventListener('keydown', (e) => { if (e.code !== 'KeyC' || state !== 'play' || !clips.ok) return; const recs = clips.recs.filter(Boolean).sort((a, b) => a.t0 - b.t0); const r = recs[0]; if (!r) return; r.save = true; r.r.stop(); });
   setInterval(clipTick, 1000);
+  // graphics: AUTO picks by the device (LOW on phones and weak machines). The picture's sharpness changes
+  // at once; lights, smooth edges and detail are built in when the game opens, so they change at the
+  // title (going back from this panel opens the game again) or the next time it is opened.
+  const GFX = ['auto', '0', '1', '2'], GFX_NAME = { auto: 'AUTO', 0: 'LOW', 1: 'MEDIUM', 2: 'HIGH' }, GFX_WHAT = ['fastest: a softer picture, fewer lights', 'between the two', 'sharpest: every light, smooth edges'];
+  let gfx = GFX.includes(String(qual)) ? String(qual) : 'auto';
+  const gfxLevel = (v) => (v === 'auto' ? (weak ? 0 : 2) : +v);
+  const gfxUI = () => {
+    const lv = gfxLevel(gfx);
+    $('sGfx').textContent = GFX_NAME[gfx];
+    $('sGfxS').textContent = (gfx === 'auto' ? `chosen for this device: ${GFX_NAME[lv].toLowerCase()}` : GFX_WHAT[lv]) + (lv === level ? '' : state === 'menu' && !net.online ? ' (when you go back)' : ' (sharpness now; the rest when the game is next opened)');
+  };
+  gfxUI();
+  $('sGfx').addEventListener('click', () => {
+    sfx.play('click');
+    gfx = GFX[(GFX.indexOf(gfx) + 1) % GFX.length];
+    store.set('tb.quality', gfx);
+    if (q.get('q')) { try { const u = new URL(location.href); u.searchParams.delete('q'); history.replaceState(null, '', u); } catch { /* */ } } // (a ?q= in the address would overrule the choice when the game opens again)
+    device.maxPixelRatio = Math.min(window.devicePixelRatio || 1, DPR[gfxLevel(gfx)]); app.resizeCanvas();
+    gfxUI();
+  });
   const goreUI = () => { const full = game.goreMode !== 'stitched'; $('sGore').textContent = full ? 'FULL' : 'STITCHED'; $('sGoreS').textContent = full ? 'red dye, torn limbs' : 'grey stuffing, nothing torn off'; };
   goreUI();
   $('sGore').addEventListener('click', () => { sfx.play('click'); game.goreMode = game.goreMode === 'stitched' ? 'full' : 'stitched'; store.set('tb.gore', game.goreMode); game.gore.setting = game.goreMode; goreUI(); });
@@ -642,7 +668,7 @@ async function boot() {
     game.frame(dt);
     tickTrial(dt);
     frames++; fpsT += rawDt;
-    if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; window.__tb.fps = fps; if (qual === 'auto' && fps < 38 && device.maxPixelRatio > 0.8) { if (++slow >= 2) { device.maxPixelRatio = Math.max(0.75, device.maxPixelRatio - 0.25); app.resizeCanvas(); slow = 0; } } else slow = 0; }
+    if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; window.__tb.fps = fps; if (gfx === 'auto' && fps < 38 && device.maxPixelRatio > 0.8) { if (++slow >= 2) { device.maxPixelRatio = Math.max(0.75, device.maxPixelRatio - 0.25); app.resizeCanvas(); slow = 0; } } else slow = 0; }
   });
   app.start();
   stage('', 1);
