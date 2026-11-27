@@ -412,7 +412,7 @@ async function boot() {
     const sv = saves.read(saves.current()), ach = JSON.parse(store.get('tb.ach', '[]'));
     $('iJourney').textContent = `${sv ? `${saves.describe(sv)}  ·  ${saves.stats(sv)}` : 'not yet begun'}  ·  achievements ${ach.length} / ${Object.keys(ACH).length}${ach.length ? `: ${ach.map((a) => ACH[a]?.[0]).filter(Boolean).join(', ')}` : ''}`;
     $('iKeys').innerHTML = touchUI ? '<b>STICK</b><span>walk, swing on the thread; up and down to climb it; down creeps</span><b>JUMP</b><span>jump, let go of the thread; hammer it to tear out a worm</span><b>HOLD</b><span>brace: hold the thread fast</span><b>USE</b><span>levers; your spool; rip a worm out of a friend</span>'
-      : '<b>A D / ← →</b><span>walk, swing on the thread</span><b>SPACE</b><span>jump, let go of the thread; hammer it to tear out a worm</span><b>W S / ↑ ↓</b><span>climb the thread; S creeps on the ground</span><b>SHIFT</b><span>brace: hold the thread fast</span><b>E</b><span>levers; your spool; rip a worm out of a friend</span><b>I</b><span>this page</span><b>ESC</b><span>pause</span>';
+      : '<b>A D / ← →</b><span>walk, swing on the thread</span><b>SPACE</b><span>jump, let go of the thread; hammer it to tear out a worm</span><b>W S / ↑ ↓</b><span>climb the thread; S creeps on the ground</span><b>SHIFT</b><span>brace: hold the thread fast</span><b>E</b><span>levers; your spool; rip a worm out of a friend</span><b>1 2 3 4</b><span>ping, wave, point, panic</span><b>C</b><span>keep the last twenty seconds as a clip</span><b>O</b><span>photo: the moment held, the camera free</span><b>I</b><span>this page</span><b>ESC</b><span>pause</span>';
     show('info', true);
     infoPaused = state === 'play' && !net.online;
     if (infoPaused) { game.paused = true; input.enabled = false; }
@@ -459,6 +459,20 @@ async function boot() {
   const voiceUI = () => { $('sVoice').textContent = voice.on ? 'ON' : 'OFF'; };
   $('sVoice').addEventListener('click', async () => { sfx.play('click'); const ok = await voice.enable(!voice.on); if (!ok) $('sVoiceS').textContent = 'the microphone was not allowed'; voiceUI(); });
   setInterval(() => voice.update(game), 100);
+  // photo mode (O): the moment held still (alone), the screen bare, the camera free; ENTER keeps a picture
+  addEventListener('keydown', (e) => {
+    if (state !== 'play' || (e.target && e.target.tagName === 'INPUT')) return;
+    if (e.code === 'KeyO') {
+      if (game.photo) { game.photo = null; document.body.classList.remove('photo'); if (!net.online) { game.paused = false; input.enabled = true; } return; }
+      game.photo = { dx: 0, dy: 0, zoom: 1 }; document.body.classList.add('photo'); if (!net.online) { game.paused = true; input.enabled = false; }
+      return;
+    }
+    if (!game.photo) return;
+    const ph = game.photo, step = 0.6;
+    if (e.code === 'ArrowLeft') ph.dx -= step; else if (e.code === 'ArrowRight') ph.dx += step; else if (e.code === 'ArrowUp') ph.dy += step; else if (e.code === 'ArrowDown') ph.dy -= step;
+    else if (e.code === 'Equal' || e.code === 'NumpadAdd') ph.zoom = Math.max(0.35, ph.zoom * 0.9); else if (e.code === 'Minus' || e.code === 'NumpadSubtract') ph.zoom = Math.min(3, ph.zoom * 1.1);
+    else if (e.code === 'Enter') app.once('frameend', () => $('app').toBlob((b) => { if (!b) return; const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = `thread-bearers-${Date.now()}.png`; a.click(); }));
+  });
   // phones: a shudder in the hand for the big moments
   game.fx.onShake = (k) => { if (touchUI && navigator.vibrate) try { navigator.vibrate(Math.round(18 + k * 70)); } catch { /* */ } };
   // clips: the last twenty seconds of play, saved as a video (C)

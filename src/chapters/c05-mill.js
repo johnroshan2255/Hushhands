@@ -40,12 +40,13 @@ export default {
     gate(79.3, 0, 'cin', 6, { startOpen: true });
     solid(78.5, 6, 98, 30); // its roof
     gate(95.3, 0, 'cis', 6);
-    L.waters.push({ id: 'cistern', kind: 'cistern', x0: 80, x1: 95.3, y0: -0.2, y1: 5.9, floor: 0, rate: 0.24, accel: 0.012, delay: 0.4, trigger: 81.5, lock: 'cin', drain: 'cis' });
+    L.waters.push({ id: 'cistern', kind: 'cistern', x0: 80, x1: 95.3, y0: -0.2, y1: 5.9, floor: 0, rate: 0.24, accel: 0.012, delay: 0.4, trigger: 80.6, all: true, lock: 'cin', drain: 'cis' }); // (it shuts once all of you are in)
     if (solo) { L.plates.push({ id: 'cis', x: 85, y: 0, w: 1.5 }); L.levers.push({ id: 'cis', x: 92, y: 0, valve: true }); }
     else {
       // wheels at different heights: some will be under water by the time the last is reached
-      const spots = [[83.4, 0], [88.9, 2.6], [92.6, 0], [86, 4.0]].slice(0, n);
-      solid(88.3, 2.2, 90.7, 2.6); if (n >= 4) solid(84.8, 3.6, 87.2, 4.0);
+      // in order along the room, so that neighbours on the thread have neighbouring wheels (within its length)
+      const spots = n >= 4 ? [[83.4, 0], [86.1, 0], [88.9, 2.6], [92.6, 0]] : [[83.4, 0], [88.9, 2.6], [92.6, 0]].slice(0, n);
+      solid(88.3, 2.2, 90.7, 2.6);
       for (const [x, y] of spots) L.levers.push({ id: 'cis', x, y, valve: true });
     }
     hint(80, 95, solo ? 'cistern1' : 'cistern');

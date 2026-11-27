@@ -90,8 +90,10 @@ Headless Chrome on Windows, against the built game, with the code-player pressin
 - **Nobody has played the new chapters by hand.** The difficulty is a guess: the bot gets through
   most of them first time, which probably means they are too easy for the bot and about right for a
   person, but that is only a guess. Section 16 asks for a hand-play of each with sound.
-- **The new chapters with 3 and 4 players** have not been run by the bots (2 players have). The
-  rules scale (more Drinkers, more moths, valves and levers per player, lamps for 3–4), but untried.
+- **Three and four players through every new chapter** (in stretches): pass. The fixes this found:
+  the Cistern now shuts only when all of you are inside (it used to shut on the first, leaving the
+  rest outside), its wheels are ordered so neighbours on the thread can reach theirs, and the
+  moth-dust ledge was lowered a metre so a chain of four can hold one another up to it.
 - Not built from section 11: the waterwheel and leeches (5), riding a fed Drinker (7), the grain
   chute (8), the scale and the collapsing floor (10), the Puppeteer lifting a doll on its strings
   (11), the hanging lake, rats down the walls and the upside-down crawler (12). (Moth-dust is built.)

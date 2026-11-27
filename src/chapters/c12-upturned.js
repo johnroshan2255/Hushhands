@@ -44,12 +44,12 @@ export default {
     // 4. the moth-dust: weightless, you rise toward the moths' nest; held down by the thread, you reach the ledge
     ground(150, 166, 8);
     L.dust.push({ x0: 151, x1: 154, y0: 7.5, y1: 10 });
-    solid(155.5, 13.2, 166, 13.6, { thin: true, ground: true }); // the ledge, high
+    solid(155.5, 12.2, 166, 12.6, { thin: true, ground: true }); // the ledge, high (but within a thread's reach of whoever holds you)
     L.kill.push({ x0: 146, x1: 166, y0: 16.6, y1: 40, why: 'moths' }); // the nest
     solid(146, 17.5, 200, 40); deco('nest', 150, 17.5, { w: 16 });
-    solid(166, -30, 200, 13.6, { ground: true });
+    solid(166, -30, 200, 12.6, { ground: true });
     hint(144, 151, solo ? 'dust1' : 'dust');
-    exit(176, 13.6);
+    exit(176, 12.6);
     zone('upturned', -14, L.x1);
     void deco;
   },

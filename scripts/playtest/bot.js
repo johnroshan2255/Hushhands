@@ -376,6 +376,13 @@
     // to the wheel: walk there, or climb to it
     if (v.y > 1) {
       const sh = L().solids.find((q) => Math.abs(q.y1 - v.y) < 0.05 && v.x > q.x0 && v.x < q.x1);
+      if (v.y > 3) { // too high to jump to: wait in the rising water beside it, then swim up onto it
+        yield* walkTo(sh.x1 + 0.4, { wait: false });
+        yield* until(() => b().swim && b().y > v.y - 1.5, 60 * 30, 'the water to rise');
+        hold('KeyA'); hold('Space');
+        yield* until(() => b().ground && b().y > v.y - 0.1, 60 * 6, 'onto the high shelf');
+        release('KeyA'); release('Space');
+      }
       for (let k = 0; k < 6 && !(b().ground && b().y > v.y - 0.1); k++) {
         yield* walkTo(sh.x0 - 0.32, { wait: false, tol: 0.06 });
         hold('Space'); yield* until(() => b().vy < 2.5 && !b().ground, 60, 'rising'); hold('KeyD');
@@ -543,7 +550,7 @@
       if (i > 60 * 90) throw new Error(`stuck in room ${id}`);
       const R = G.roomInfo(id), r = R.r, B = b();
       if (o.until && o.until(R)) break;
-      if (o.brace !== false && (R.turning || R.warn != null) && R.inside) { release('KeyD'); release('KeyA'); release('Space'); release('KeyS'); hold('ShiftLeft'); yield; continue; }
+      if (o.brace !== false && (R.turning || R.warn != null) && R.inside && (b().ground || R.turning)) { release('KeyD'); release('KeyA'); release('Space'); release('KeyS'); hold('ShiftLeft'); yield; continue; }
       release('ShiftLeft');
       const f = R.rot ? 2 * r.cx - B.x : B.x;
       if (Math.abs(f - fx) < 0.25 && !o.until) break;
@@ -579,12 +586,12 @@
   };
   S['upturned:3'] = function* () { // the moth-dust: anchored by the thread, float up to the ledge
     yield* gather();
-    const up = (q) => q.ground && q.y > 13.4;
+    const up = (q) => q.ground && q.y > 12.4;
     if (solo()) { yield* walkTo(150.4, { wait: false }); yield* setSpool(); }
     else { yield* walkTo(150.65 - (role() - 1) * 0.5, { wait: false }); hold('ShiftLeft'); yield* until(() => G.players.every((p) => p.i >= role() || up(p.b)), 60 * 60, 'the ones before me up'); release('ShiftLeft'); }
     yield* walkTo(152.6, { wait: false });
     yield* until(() => b().floatT > 0, 120, 'the dust');
-    yield* until(() => { const B = b(); if (up(B)) return true; if (B.y > 12.3) { hold('KeyD'); release('KeyA'); } else if (B.x > 154.9) { hold('KeyA'); release('KeyD'); } else { release('KeyA'); release('KeyD'); } return false; }, 60 * 8, 'up onto the ledge');
+    yield* until(() => { const B = b(); if (up(B)) return true; if (B.y > 11.3) { hold('KeyD'); release('KeyA'); } else if (B.x > 154.9) { hold('KeyA'); release('KeyD'); } else { release('KeyA'); release('KeyD'); } return false; }, 60 * 8, 'up onto the ledge');
     release('KeyD'); release('KeyA');
     say('up on the ledge');
     if (solo()) yield* callSpool();

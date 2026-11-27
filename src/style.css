@@ -227,3 +227,4 @@ body.touching #trial { top: auto; bottom: calc(5.5rem + var(--safe-b)); }
 #captions div { font-size: 0.8rem; letter-spacing: 0.06em; color: #e9ecea; background: rgba(6, 8, 8, 0.62); padding: 0.18rem 0.5rem; border-left: 2px solid var(--amber); transition: opacity 0.8s; }
 #captions div.out { opacity: 0; }
 body.streamer #lCode { filter: blur(6px); }
+body.photo #hud, body.photo #touch, body.photo #tags, body.photo #marks, body.photo #captions, body.photo #breath, body.photo #rotring, body.photo #cold, body.photo #dread { display: none !important; }

@@ -351,7 +351,8 @@ export class Game {
     const next = this.oneThread ? null : L.cps[W.cp + 1]; // (One Thread: no lanterns inside a chapter)
     if (next && bodies.some((b) => b.real && !b.dead && b.x >= next.x - 0.6 && Math.abs(b.y - next.y) < 3)) { W.cp++; this.emit({ t: 'cp', k: W.cp }); }
     // the water comes in once someone is well inside
-    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && bodies.some((b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && (w.anyY || b.y < w.floor + 7))) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); if (w.lock) { W.open[w.lock] = false; this.emit({ t: 'shut', id: w.lock }); } }
+    const inside = (w, b) => b.real && !b.dead && b.x > w.trigger && b.x < w.x1 && (w.anyY || b.y < w.floor + 7);
+    for (const w of L.waters) if (w.trigger != null && W.wT0[w.id] == null && (w.all ? bodies.filter((b) => b.real && !b.dead).every((b) => inside(w, b)) : bodies.some((b) => inside(w, b)))) { W.wT0[w.id] = T; this.emit({ t: 'flood', id: w.id }); if (w.lock) { W.open[w.lock] = false; this.emit({ t: 'shut', id: w.lock }); } }
     // rot: it creeps along the thread to whoever is tied, and in time takes a doll apart
     for (const [k, t0] of Object.entries(H.rot)) {
       const i = +k, p = this.players[i];
@@ -1228,6 +1229,7 @@ export class Game {
     this.swing = Math.max(0, (this.swing || 0) - dt * 0.35);
     this.drawStrings(dt);
     const [shx, shy] = fx.shakeOffset(time);
+    if (this.photo) { const ph = this.photo; cam.setPosition(this.cam.x + ph.dx, this.cam.y + ph.dy, dist * ph.zoom); } else
     cam.setPosition(this.cam.x + shx, this.cam.y + shy, dist);
     cam.setEulerAngles(0, 0, this.camRoll * 57.2958 + (this.swing > 0 ? Math.sin(this.swing * 9) * this.swing * 22 : 0));
     cam.camera.farClip = dist + 140; cam.camera.nearClip = Math.max(1, dist - 14);
