@@ -701,6 +701,7 @@ export class Game {
         if (L.candles.some((c) => Math.abs(c.x - b.x) < 0.85 && Math.abs(c.y - b.y) < 1.2) && !(this.burnT > 0)) { this.burnT = 0.5; this.intent({ t: 'burn' }); }
         this.burnT = Math.max(0, (this.burnT || 0) - dt);
       }
+      if (b.leeched && b.swim) inp = { ...inp, x: inp.x * 0.55 };
       if (me.rot != null && !b.dead) inp = { ...inp, x: inp.x * 0.7, jump: inp.jump && Math.random() < 0.85 };
       const carrying = L.lamps.findIndex((l) => l.by === this.meIdx);
       if (carrying >= 0) inp = { ...inp, jump: false };
@@ -912,6 +913,11 @@ export class Game {
   /** under water the breath goes; out of it, it comes back. Empty: drowned */
   breathe(b, dt) {
     if (b.breath == null) b.breath = 1;
+    // leeches: linger in still water and they fasten on; out of the water they drop off
+    const still = b.swim && this.L.waters.some((w) => w.leeches && b.x > w.x0 && b.x < w.x1);
+    if (still) { b.leechT = (b.leechT || 0) + dt; if (b.leechT > 4 && !b.leeched) { b.leeched = true; this.sfx.play('squelch', { x: b.x, vol: 1.3 }); this.cap('[something fastens on]'); this.hud.flash('#2a1a1a', 0.3, 120); } }
+    else { if (b.leeched && b.ground) { this.fx.burst('ink', b.x, b.y + 0.5, 0.4, 10, { power: 0.6 }); this.sfx.play('rip', { x: b.x, vol: 0.5 }); } if (b.ground) { b.leeched = false; b.leechT = 0; } }
+    if (b.leeched && b.swim) { b.breath -= dt / 14; if (Math.random() < dt * 4) this.fx.burst('dye', b.x, b.y + 0.4, 0.4, 1, { power: 0.3 }); if (b.breath <= 0) { b.breath = 0; this.die('water'); return; } }
     const fumes = this.L.fumes.some((f) => b.x > f.x0 && b.x < f.x1 && b.y + 0.9 < f.y1 && b.y + 0.9 > f.y0);
     if (b.under || fumes) {
       b.breath -= dt / (fumes ? 6 : 8);

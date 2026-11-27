@@ -278,8 +278,16 @@
       const alive = dk().filter(inBeat).filter((m) => !gone(m));
       if (!alive.length) return;
       const busy = () => alive.some((m) => m.mode === 'hunt' || m.mode === 'drink');
-      yield* walkTo(alive[0].x - 6.6, { wait: false, done: busy });
-      yield* until(busy, 240, 'a Drinker seeing me');
+      // close in on the nearest until one of them sees the light (it drifts as it hovers)
+      for (let t = 0; !busy(); t++) {
+        chk(); if (t > 60 * 12) throw new Error('a Drinker seeing me');
+        const near = alive.filter((m) => !gone(m)).sort((p, q) => Math.abs(p.x - b().x) - Math.abs(q.x - b().x))[0];
+        if (!near) break;
+        const tx = near.x - 6.0, d = tx - b().x;
+        if (Math.abs(d) > 0.2) { hold(d > 0 ? 'KeyD' : 'KeyA'); release(d > 0 ? 'KeyA' : 'KeyD'); } else { release('KeyD'); release('KeyA'); }
+        yield;
+      }
+      release('KeyD'); release('KeyA');
       say('lured');
       yield* walkTo(back, { wait: false });
       yield* until(() => !busy(), 60 * 15, 'it burning');
@@ -469,7 +477,7 @@
       // go when it is far, or busy somewhere else
       yield* until(() => G.players.every((p) => Math.abs(glut().x - p.b.x) > (N() > 1 ? 9 : 7)) || (busy(glut()) && Math.abs(glut().tx - b().x) > 3), 60 * 40, 'a moment to move');
       release('KeyS');
-      yield* walkTo(s.x - role() * 0.3, { wait: false, tol: 0.12 });
+      yield* walkTo(s.x - role() * 0.14, { wait: false, tol: 0.08 });
       yield* hide();
     }
     yield* until(() => G.players.every((p) => Math.abs(glut().x - p.b.x) > (N() > 1 ? 9.5 : 6)), 60 * 40, 'a moment to move');
@@ -490,7 +498,7 @@
     const s = L().sacks[L().sacks.length - 1], q = L().meat[L().meat.length - 1];
     yield* until(() => Math.abs(glut().x - b().x) > 7 || glut().mode === 'chew', 60 * 30, 'a moment to move');
     if (role() === 0) { yield* walkTo(q.x, { wait: false, tol: 0.2 }); yield* tap('KeyE', 4); }
-    yield* walkTo(s.x - role() * 0.3, { wait: false, tol: 0.12 });
+    yield* walkTo(s.x - role() * 0.14, { wait: false, tol: 0.08 });
     hold('KeyS');
     yield* until(() => W().open.gl, 60 * 30, 'it eating the poison');
     release('KeyS');
@@ -615,7 +623,6 @@
   S['spindle:1'] = function* () { yield* climb(10); yield* walkTo(L().cps[2].x + role() * 0.6, { wait: false }); };
   S['spindle:2'] = function* () { yield* climb(15); yield* walkTo(L().cps[3].x + 0.6 - role() * 0.6, { wait: false }); };
   S['spindle:3'] = function* () {
-    yield* gather();
     const want = window.__botEnding || 'wind', z = L().ends.find((q) => q.kind === want);
     yield* walkTo((z.x0 + z.x1) / 2 + (role() - (N() - 1) / 2) * 1.1, { wait: false });
     yield* until(() => W().phase === 'won', 60 * 40, 'the end');

@@ -96,6 +96,7 @@ const HINTS = {
   // the Drowned Mill
   swim: [`In deep water you sink. Hold ${K('SPACE')} to swim up, ${K('S')} to dive. The ring over you is your breath`, 'In deep water you sink. Hold JUMP to swim up, pull down to dive. The ring over you is your breath'],
   dive: ['Dive under the wall. Come up on the other side before your breath runs out', 'Dive under the wall. Come up on the other side before your breath runs out'],
+  leeches: ['Still water. Do not linger in it', 'Still water. Do not linger in it'],
   crate: [`Walk into the crate to push it into the water. It floats: push it, swimming; climb it with ${K('SPACE')}`, 'Walk into the crate to push it into the water. It floats: push it, swimming; climb it with JUMP'],
   eel: ['Something lights up under the water before it strikes. Out of the water when it glows', 'Something lights up under the water before it strikes. Out of the water when it glows'],
   cistern: [`The door has shut. Every wheel turned at once: ${K('E')}, held, even under water`, 'The door has shut. Every wheel turned at once: USE, held, even under water'],

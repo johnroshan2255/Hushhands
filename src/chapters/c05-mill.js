@@ -6,7 +6,7 @@ export default {
   card: ['The mill is still filling.', 'It has been filling for a long time.'],
   build(k) {
     const { button, other, L, n, solo, solid, ground, cp, gate, deco, hint, zone, begin, exit, deadDoll } = k;
-    const pool = (id, x0, x1, floor, surface) => { solid(x0, floor - 30, x1, floor, { ground: true }); L.waters.push({ id, kind: 'pool', x0, x1, y0: surface, y1: surface, floor }); };
+    const pool = (id, x0, x1, floor, surface, o = {}) => { solid(x0, floor - 30, x1, floor, { ground: true }); L.waters.push({ id, kind: 'pool', x0, x1, y0: surface, y1: surface, floor, ...o }); };
     begin('THE DROWNED MILL', 0, 30);
     // 1. the flooded stair: swim, and dive under the wall that comes down into the water
     ground(0, 10, 0);
@@ -19,8 +19,8 @@ export default {
     // 2. the crate: push it into the water; it floats; from its top the high ledge is in reach
     ground(22, 36, 0);
     L.crates.push({ x: 40.6, y: -1.6, w: 1.4, h: 1.2, floats: true }); // afloat, caught against the weed
-    pool('crate', 36, 48, -3, -0.6);
-    hint(31, 40, 'crate');
+    pool('crate', 36, 48, -3, -0.6, { leeches: true }); // (still water: do not linger)
+    hint(31, 40, 'crate'); hint(40, 47.5, 'leeches');
     const yH = 1.4;
     solid(48, -30, 54, yH, { ground: true });
     deco('bigcog', 42, 5, { r: 4.5, far: true, period: 30, dir: -1 });
