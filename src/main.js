@@ -1,6 +1,6 @@
 // Boot, the title, the lobby, and everything on screen that isn't the world: the page's own HTML is
 // the loading screen; behind the title the game is already running, the first wanderer waiting.
-import { createApp, Renderer, setLightCount } from './render.js';
+import { createApp, Renderer, setLightCount, setLite } from './render.js';
 import { Sfx } from './audio.js';
 import { Input } from './input.js';
 import { Net } from './net.js';
@@ -150,10 +150,16 @@ async function boot() {
   const mobile = isTouch() && Math.min(screen.width, screen.height) < 900;
   const weak = mobile || (navigator.hardwareConcurrency || 8) <= 4 || (navigator.deviceMemory || 8) <= 4;
   const qual = q.get('q') || store.get('tb.quality', 'auto');
-  const level = qual === 'auto' ? (weak ? 0 : 2) : +qual;
-  setLightCount(level === 0 ? 8 : level === 1 ? 12 : 16);
+  // the weakest phones (little memory, few cores), and any device that AUTO has already seen struggle
+  // on LOW (tb.weak, set by the frame-rate watch below), get the lightest picture of all
+  const feeble = (mobile && ((navigator.deviceMemory || 8) <= 2 || (navigator.hardwareConcurrency || 8) <= 4)) || store.get('tb.weak', '') === '1';
+  const autoLevel = () => (weak ? (feeble ? -1 : 0) : 2);
+  const level = qual === 'auto' ? autoLevel() : Math.max(-1, Math.min(2, +qual || 0));
+  setLightCount(level < 0 ? 6 : level === 0 ? 8 : level === 1 ? 12 : 16);
+  setLite(level < 0);
+  document.body.classList.toggle('lite', level < 0);
   stage('lighting the lantern', 0.25);
-  const DPR = [1.25, 1.5, 2]; // how sharp the picture may be, by level
+  const DPR = { '-1': 1, 0: 1.25, 1: 1.5, 2: 2 }; // how sharp the picture may be, by level
   const app = await createApp($('app'), { antialias: level >= 1, dpr: DPR[level] ?? 2 });
   const device = app.graphicsDevice;
   const R = new Renderer(app);
@@ -170,12 +176,12 @@ async function boot() {
     for (let i = 0; i < im.data.length; i += 4) { const v = 150 + Math.random() * 105; im.data[i] = im.data[i + 1] = im.data[i + 2] = v; im.data[i + 3] = 255; }
     g.putImageData(im, 0, 0);
     $('grain').style.backgroundImage = `url(${c.toDataURL()})`;
-    if (level === 0) $('grain').style.animation = 'none';
+    if (level <= 0) $('grain').style.animation = 'none';
   } catch { /* no grain */ }
 
   // ---------------------------------------------------------------- what the game asks the page to show
   let trialReady = false; // (the trial's state is declared further down; setState may run before it)
-  let state = 'menu', touchUI = isTouch(), hintKey = null, hintVars = {}, useLabel = null, cardTimer = 0, toastTimer = 0, flashTimer = 0, lastBeat = '';
+  let state = 'menu', touchUI = isTouch(), hintKey = null, hintVars = {}, useLabel = null, cardTimer = 0, toastTimer = 0, flashTimer = 0, flashOff = 0, lastBeat = '';
   const esc = (s) => String(s).replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
   const tagEls = new Map(), markEls = new Map();
   const renderHint = () => {
@@ -195,16 +201,19 @@ async function boot() {
     hint(key, vars = {}) { hintKey = key; hintVars = vars; renderHint(); },
     /** dark: the edges closing in (0..1); red: the throb of something in your head (0..1); bpm: its beat */
     dread(dark, red, bpm) {
-      const s = $('dread').style;
+      const el = $('dread'), s = el.style;
       s.setProperty('--dk', dark.toFixed(2)); s.setProperty('--rd', red.toFixed(2));
+      // (a layer that shows nothing is taken out: a phone blends every full-screen layer, seen or not)
+      el.querySelector('.dk').hidden = dark < 0.005; el.querySelector('.rd').hidden = red < 0.005;
       const beat = `${(60 / Math.max(40, bpm)).toFixed(2)}s`;
       if (beat !== lastBeat) { lastBeat = beat; s.setProperty('--beat', beat); }
     },
     /** a flash of the whole screen: a colour, held for ms, then gone */
     flash(color = '#fff', strength = 0.5, ms = 80) {
       const f = $('dread').querySelector('.fl');
-      f.style.setProperty('--flc', color); f.classList.add('now'); f.style.opacity = strength;
-      clearTimeout(flashTimer); flashTimer = setTimeout(() => { f.classList.remove('now'); f.style.opacity = 0; }, ms);
+      f.hidden = false; f.style.setProperty('--flc', color); f.classList.add('now'); f.style.opacity = strength;
+      clearTimeout(flashTimer); clearTimeout(flashOff);
+      flashTimer = setTimeout(() => { f.classList.remove('now'); f.style.opacity = 0; flashOff = setTimeout(() => { f.hidden = true; }, 420); }, ms); // (faded out: taken out, like the others)
     },
     use(label) { useLabel = label; renderHint(); },
     fade(to, dur = 0.6, delay = 0) { const f = $('fade'); f.style.transition = dur ? `opacity ${dur}s ease ${delay}s` : 'none'; if (!dur) void f.offsetWidth; f.style.opacity = to; },
@@ -243,7 +252,7 @@ async function boot() {
       setTimeout(() => { then(); setTimeout(() => { el.classList.remove('on'); setTimeout(() => { el.hidden = true; }, 1000); }, 400); }, 4600);
     },
   };
-  const game = new Game({ app, R, sfx, input, net, hud, low: level === 0 });
+  const game = new Game({ app, R, sfx, input, net, hud, low: level <= 0 });
   window.__tb = { game, net, input, hud, state: () => state };
 
   // ---------------------------------------------------------------- screens
@@ -517,9 +526,10 @@ async function boot() {
   // graphics: AUTO picks by the device (LOW on phones and weak machines). The picture's sharpness changes
   // at once; lights, smooth edges and detail are built in when the game opens, so they change at the
   // title (going back from this panel opens the game again) or the next time it is opened.
-  const GFX = ['auto', '0', '1', '2'], GFX_NAME = { auto: 'AUTO', 0: 'LOW', 1: 'MEDIUM', 2: 'HIGH' }, GFX_WHAT = ['fastest: a softer picture, fewer lights', 'between the two', 'sharpest: every light, smooth edges'];
+  const GFX = ['auto', '-1', '0', '1', '2'], GFX_NAME = { auto: 'AUTO', '-1': 'LOWEST', 0: 'LOW', 1: 'MEDIUM', 2: 'HIGH' };
+  const GFX_WHAT = { '-1': 'for the weakest phones: plain light, no grain, a soft picture', 0: 'fast: a softer picture, fewer lights', 1: 'between the two', 2: 'sharpest: every light, smooth edges' };
   let gfx = GFX.includes(String(qual)) ? String(qual) : 'auto';
-  const gfxLevel = (v) => (v === 'auto' ? (weak ? 0 : 2) : +v);
+  const gfxLevel = (v) => (v === 'auto' ? autoLevel() : +v);
   const gfxUI = () => {
     const lv = gfxLevel(gfx);
     $('sGfx').textContent = GFX_NAME[gfx];
@@ -700,13 +710,21 @@ async function boot() {
   // ---------------------------------------------------------------- go
   stage('raising the loom', 0.6);
   attract();
-  let fpsT = 0, frames = 0, slow = 0;
+  let fpsT = 0, frames = 0, slow = 0, feebleN = 0;
   app.on('update', (rawDt) => {
     const dt = Math.min(rawDt, 1 / 20);
     game.frame(dt);
     tickTrial(dt);
     frames++; fpsT += rawDt;
-    if (fpsT > 2) { const fps = frames / fpsT; frames = 0; fpsT = 0; window.__tb.fps = fps; if (gfx === 'auto' && fps < 38 && device.maxPixelRatio > 0.8) { if (++slow >= 2) { device.maxPixelRatio = Math.max(0.75, device.maxPixelRatio - 0.25); app.resizeCanvas(); slow = 0; } } else slow = 0; }
+    if (fpsT > 2) {
+      const fps = frames / fpsT; frames = 0; fpsT = 0; window.__tb.fps = fps;
+      // slow: a softer picture (on AUTO, and on LOWEST, which is there to run at all), step by step
+      const soften = gfx === 'auto' || gfxLevel(gfx) < 0, floor = level < 0 ? 0.6 : 0.75;
+      if (soften && fps < 38 && device.maxPixelRatio > floor + 0.05) { if (++slow >= 2) { device.maxPixelRatio = Math.max(floor, device.maxPixelRatio - 0.25); app.resizeCanvas(); slow = 0; } } else slow = 0;
+      // still slow in play with the picture as soft as LOW goes: this device wants LOWEST. AUTO remembers
+      // it (the game opens on LOWEST from now on) and takes what it can at once (nothing laid over the game)
+      if (gfx === 'auto' && level >= 0 && state === 'play' && !game.paused && !document.hidden && fps < 27 && device.maxPixelRatio <= floor + 0.05) { if (++feebleN >= 3 && store.get('tb.weak', '') !== '1') { store.set('tb.weak', '1'); document.body.classList.add('lite'); } } else feebleN = 0;
+    }
   });
   app.start();
   stage('', 1);

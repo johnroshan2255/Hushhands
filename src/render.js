@@ -8,6 +8,11 @@ import * as pc from 'playcanvas';
 export let NL = 16;
 /** low-end devices: fewer lights per pixel (call before any material is made) */
 export function setLightCount(n) { NL = n; }
+/** the lightest picture, for the weakest phones (call before any material is made): the lights are
+ *  worked out at the corners of each shape and spread across it, not at every pixel; fog banks and
+ *  glows lose their second layer of noise. The world is black shapes in fog, so little of it shows. */
+export let LITE = false;
+export function setLite(on) { LITE = !!on; }
 const range = (n) => Array.from({ length: n }, (_, i) => i);
 
 const HASH = `
@@ -68,7 +73,61 @@ void main(void) {
   vCol = vertex_color;
   gl_Position = matrix_viewProjection * wp;
 }`;
-const WORLD_FS = () => `
+const WORLD_VS_LITE = () => `
+attribute vec3 vertex_position;
+attribute vec3 vertex_normal;
+attribute vec4 vertex_color;
+uniform mat4 matrix_model;
+uniform mat4 matrix_viewProjection;
+varying vec3 vWorld;
+varying vec3 vLight;
+varying vec4 vCol;
+${LIGHTS()}
+void main(void) {
+  vec4 wp = matrix_model * vec4(vertex_position, 1.0);
+  vWorld = wp.xyz;
+  vLight = lightAt(wp.xyz, normalize(mat3(matrix_model) * vertex_normal));
+  vCol = vertex_color;
+  gl_Position = matrix_viewProjection * wp;
+}`;
+const WORLD_FS = () => (LITE ? WORLD_FS_LITE : WORLD_FS_FULL());
+// (the same picture, with the light handed down from the corners)
+const WORLD_FS_LITE = `
+uniform float uFade;
+uniform vec4 uTint;
+uniform vec4 uDis;
+uniform float uFogStart;
+uniform float uFogMul;
+uniform float uExpo;
+varying vec3 vWorld;
+varying vec3 vLight;
+varying vec4 vCol;
+${HASH}
+${SKY}
+void main(void) {
+  if (uFade > 0.001) {
+    float h = hash12(floor(gl_FragCoord.xy * 0.5));
+    if (h < uFade) discard;
+  }
+  float burn = 0.0;
+  if (uDis.w > 0.001) {
+    float d = distance(vWorld.xy, uDis.xy) + (vnoise(vWorld.xy * 1.7) - 0.5) * 1.6;
+    if (d < uDis.w) discard;
+    burn = 1.0 - smoothstep(0.0, 0.55, d - uDis.w);
+  }
+  vec2 uv = gl_FragCoord.xy / uRes;
+  vec3 c = vCol.rgb * uTint.rgb * vLight;
+  float glow = clamp(vCol.a + uTint.a, 0.0, 2.0);
+  c += vCol.rgb * glow * 1.4;
+  float depth = max(0.0, uFogStart - vWorld.z);
+  float fogK = (1.0 - exp(-depth / 13.0)) * uFogMul;
+  c = mix(c, sky(uv) * 0.94, clamp(fogK, 0.0, 0.97) * (1.0 - clamp(glow, 0.0, 1.0) * 0.6));
+  c *= uExpo;
+  c = c / (1.0 + max(c - 0.7, 0.0) * 0.6);
+  c += vec3(1.0, 0.55, 0.18) * burn * burn * 1.6;
+  gl_FragColor = vec4(c, 1.0);
+}`;
+const WORLD_FS_FULL = () => `
 uniform float uFade;
 uniform vec4 uTint;      // rgb multiplies the albedo, a adds glow
 uniform vec4 uDis;       // burn-away: xyz = where it starts, w = how far it has spread (0 = off)
@@ -145,7 +204,7 @@ void main(void) {
   gl_Position = matrix_viewProjection * wp;
 }`;
 // additive light: halos, flames, ripples, window glass
-const GLOW_FS = `
+const GLOW_FS = () => `
 uniform float uGain;
 uniform vec4 uTint;
 uniform float uTime;
@@ -154,11 +213,11 @@ varying vec3 vWorld;
 varying vec4 vCol;
 ${HASH}
 void main(void) {
-  float n = 0.85 + 0.3 * vnoise(vWorld.xy * 1.3 + vec2(uTime * 0.7, uTime * 0.3));
+  float n = ${LITE ? '1.0' : '0.85 + 0.3 * vnoise(vWorld.xy * 1.3 + vec2(uTime * 0.7, uTime * 0.3))'};
   gl_FragColor = vec4(vCol.rgb * uTint.rgb * vCol.a * uTint.a * uGain * n * (1.0 - uFade), 1.0);
 }`;
 // drifting fog banks: sky-coloured, noisy alpha
-const FOG_FS = `
+const FOG_FS = () => `
 uniform float uTime;
 uniform float uDensity;
 uniform float uExpo;
@@ -169,7 +228,7 @@ ${SKY}
 void main(void) {
   vec2 uv = gl_FragCoord.xy / uRes;
   vec2 p = vWorld.xy * vec2(0.035, 0.11) + vec2(uTime * 0.012 * (1.0 + vWorld.z * 0.01), 0.0);
-  float n = vnoise(p) * 0.65 + vnoise(p * 2.3 + 7.1) * 0.35;
+  float n = ${LITE ? 'vnoise(p)' : 'vnoise(p) * 0.65 + vnoise(p * 2.3 + 7.1) * 0.35'};
   float a = vCol.a * smoothstep(0.32, 0.8, n) * uDensity;
   gl_FragColor = vec4(sky(uv) * 1.1 * mix(1.0, uExpo, 0.6), a);
 }`;
@@ -184,7 +243,7 @@ const ATTR = { vertex_position: pc.SEMANTIC_POSITION, vertex_normal: pc.SEMANTIC
 const ATTR_C = { vertex_position: pc.SEMANTIC_POSITION, vertex_color: pc.SEMANTIC_COLOR };
 
 export function worldMaterial({ tint = [1, 1, 1, 0], fade = 0, cull = false } = {}) {
-  const m = new pc.ShaderMaterial({ uniqueName: `hhWorld${NL}`, vertexGLSL: WORLD_VS, fragmentGLSL: WORLD_FS(), attributes: ATTR });
+  const m = new pc.ShaderMaterial({ uniqueName: `hhWorld${NL}${LITE ? 'L' : ''}`, vertexGLSL: LITE ? WORLD_VS_LITE() : WORLD_VS, fragmentGLSL: WORLD_FS(), attributes: ATTR });
   m.setParameter('uTint', new Float32Array(tint));
   m.setParameter('uFade', fade);
   m.setParameter('uDis', new Float32Array([0, 0, 0, 0]));
@@ -195,7 +254,7 @@ export function worldMaterial({ tint = [1, 1, 1, 0], fade = 0, cull = false } = 
 export function setTint(m, r, g, b, glow = 0) { m.setParameter('uTint', new Float32Array([r, g, b, glow])); }
 
 export function glowMaterial(gain = 1) {
-  const m = new pc.ShaderMaterial({ uniqueName: 'hhGlow', vertexGLSL: COL_VS, fragmentGLSL: GLOW_FS, attributes: ATTR_C });
+  const m = new pc.ShaderMaterial({ uniqueName: `hhGlow${LITE ? 'L' : ''}`, vertexGLSL: COL_VS, fragmentGLSL: GLOW_FS(), attributes: ATTR_C });
   m.blendState = new pc.BlendState(true, pc.BLENDEQUATION_ADD, pc.BLENDMODE_ONE, pc.BLENDMODE_ONE);
   m.depthWrite = false;
   m.cull = pc.CULLFACE_NONE;
@@ -206,7 +265,7 @@ export function glowMaterial(gain = 1) {
   return m;
 }
 export function fogMaterial(density = 1) {
-  const m = new pc.ShaderMaterial({ uniqueName: 'hhFog', vertexGLSL: COL_VS, fragmentGLSL: FOG_FS, attributes: ATTR_C });
+  const m = new pc.ShaderMaterial({ uniqueName: `hhFog${LITE ? 'L' : ''}`, vertexGLSL: COL_VS, fragmentGLSL: FOG_FS(), attributes: ATTR_C });
   m.blendType = pc.BLEND_NORMAL;
   m.depthWrite = false;
   m.cull = pc.CULLFACE_NONE;

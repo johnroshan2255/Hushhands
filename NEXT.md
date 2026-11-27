@@ -61,8 +61,11 @@ reach the body and hold USE; the downed can twitch to show where they are), ping
 **Reach**: captions for the sounds that matter, achievements (eleven), phone vibration, streamer
 mode, clips (C: the last ~20 s as a .webm, on stronger machines), **photo mode** (O: the moment held
 still when alone, the screen bare, the camera free with the arrows and + / −, ENTER keeps a .png),
-what took you on the end screen. **Graphics** in the settings panel (AUTO, LOW, MEDIUM, HIGH; AUTO is
-LOW on phones and weak machines): sharpness changes at once, lights and smooth edges at the title.
+what took you on the end screen. **Graphics** in the settings panel (AUTO, LOWEST, LOW, MEDIUM, HIGH;
+AUTO is LOW on phones and weak machines, LOWEST on the weakest): sharpness changes at once, lights and
+smooth edges at the title. **LOWEST** is for phones that cannot hold LOW: the lights are worked out at
+the corners of each shape, not at every pixel; no grain or vignette is laid over the game; the picture
+is softer, and softens further if it must. AUTO moves a device there by itself if it sees it struggle.
 **Full screen** from a button in the top right corner (title and play alike; pause and *i* sit beside
 it): kept, and taken up again at the first tap after the game opens (an iPhone's browser has none for
 a page: tapped there, the button says to add the game to the home screen).
@@ -129,6 +132,9 @@ Headless Chrome, against the built game, with the code-player pressing real keys
   ahead of you any more). *One Thread* (no lanterns inside a chapter) is a kind of journey; **the Daily Thread** is one
   chapter a day with that day's seed and one life, and a board of times kept by the server
   (`/daily`, in memory and `server/daily.json`). Not built: death replays, cosmetics, Twitch votes.
-- Low-end devices (section 15): no real phone or old laptop yet (only Chrome's throttling).
+- Low-end devices (section 15): no real phone or old laptop yet. The processor is not what is heavy
+  (60 fps with it 10× slower); the picture is. Drawn in software, four times a phone's pixels, LOW
+  holds 13–17 fps and LOWEST 39–45. On every level the dread's layers are now taken out of the page
+  when they show nothing (a phone blends each full-screen layer whether it shows or not).
 - Voice behind strict networks needs a TURN server (only STUN now).
 - Clips are video only (no sound).

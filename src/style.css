@@ -23,6 +23,9 @@ input { font: inherit; color: inherit; }
 #grain { position: fixed; inset: -64px; pointer-events: none; opacity: 0.13; mix-blend-mode: multiply; background-size: 128px 128px; animation: grain 0.5s steps(4) infinite; }
 @keyframes grain { 0% { transform: translate(0, 0); } 25% { transform: translate(-31px, 17px); } 50% { transform: translate(23px, -41px); } 75% { transform: translate(-47px, -19px); } 100% { transform: translate(11px, 37px); } }
 .vig { position: fixed; inset: 0; pointer-events: none; background: radial-gradient(ellipse 82% 80% at 50% 50%, transparent 55%, rgba(4, 6, 6, 0.22) 82%, rgba(2, 3, 3, 0.55) 100%); }
+/* the lightest picture: nothing laid over the game that a weak phone must blend on every frame */
+body.lite #grain, body.lite .vig { display: none; }
+body.lite .btn, body.lite .panel { backdrop-filter: none; -webkit-backdrop-filter: none; }
 #fade { position: fixed; inset: 0; background: #020303; opacity: 0; pointer-events: none; z-index: 30; }
 /* the dread: darkness closing in, a red throb when something is in your head, a flash when it hears you */
 #dread { position: fixed; inset: 0; pointer-events: none; }
